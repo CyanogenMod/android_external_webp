@@ -1,0 +1,17 @@
+URL: http://review.webmproject.org/gitweb?p=libwebp.git
+Version: 43/1443/1
+License: Google BSD like
+
+Local modifications:
+- Rewrite Android.mk to remove duplicate definitions and set module name
+  in a consistent way with other external libraries
+- Move public headers from src/webp to include/webp, so path to headers
+  may be appended into CFLAGS without risk for other private headers 
+  (e.g. bits.h) to leak into
+
+The Android.mk file creates a static library which can be added 
+to any application by Adding to LOCAL_STATIC_JAVA_LIBRARIES 
+libwebp-decode:
+
+  LOCAL_STATIC_JAVA_LIBRARIES += libwebp-decode
+
