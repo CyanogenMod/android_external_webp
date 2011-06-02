@@ -28,9 +28,11 @@ static int8_t sclip1[1020 + 1020 + 1];  // clips [-1020, 1020] to [-128, 127]
 static int8_t sclip2[112 + 112 + 1];    // clips [-112, 112] to [-16, 15]
 static uint8_t clip1[255 + 510 + 1];    // clips [-255,510] to [0,255]
 
-static int tables_ok = 0;
+// We declare this variable 'volatile' to prevent instruction reordering
+// and make sure it's set to true _last_ (so as to be thread-safe)
+static volatile int tables_ok = 0;
 
-void VP8DspInitTables() {
+void VP8DspInitTables(void) {
   if (!tables_ok) {
     int i;
     for (i = -255; i <= 255; ++i) {
@@ -468,16 +470,16 @@ static void DC8uvNoTopLeft(uint8_t *dst) {    // DC with nothing
 //-----------------------------------------------------------------------------
 // default C implementations
 
-VP8PredFunc VP8PredLuma4[11] = {
+VP8PredFunc VP8PredLuma4[NUM_BMODES] = {
   DC4, TM4, VE4, HE4, RD4, VR4, LD4, VL4, HD4, HU4
 };
 
-VP8PredFunc VP8PredLuma16[7] = {
+VP8PredFunc VP8PredLuma16[NUM_B_DC_MODES] = {
   DC16, TM16, VE16, HE16,
   DC16NoTop, DC16NoLeft, DC16NoTopLeft
 };
 
-VP8PredFunc VP8PredChroma8[7] = {
+VP8PredFunc VP8PredChroma8[NUM_B_DC_MODES] = {
   DC8uv, TM8uv, VE8uv, HE8uv,
   DC8uvNoTop, DC8uvNoLeft, DC8uvNoTopLeft
 };
@@ -685,7 +687,7 @@ void (*VP8SimpleHFilter16i)(uint8_t*, int, int) = SimpleHFilter16i;
 
 //-----------------------------------------------------------------------------
 
-void VP8DspInit() {
+void VP8DspInit(void) {
   // later we'll plug some SSE2 variant here
 }
 

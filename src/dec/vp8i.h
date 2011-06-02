@@ -9,8 +9,8 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
-#ifndef WEBP_DECODE_VP8I_H_
-#define WEBP_DECODE_VP8I_H_
+#ifndef WEBP_DEC_VP8I_H_
+#define WEBP_DEC_VP8I_H_
 
 #include <string.h>     // for memcpy()
 #include "bits.h"
@@ -21,6 +21,11 @@ extern "C" {
 
 //-----------------------------------------------------------------------------
 // Various defines and enums
+
+// version numbers
+#define DEC_MAJ_VERSION 0
+#define DEC_MIN_VERSION 1
+#define DEC_REV_VERSION 2
 
 #define ONLY_KEYFRAME_CODE      // to remove any code related to P-Frames
 
@@ -45,7 +50,8 @@ enum { B_DC_PRED = 0,   // 4x4 modes
        // special modes
        B_DC_PRED_NOTOP = 4,
        B_DC_PRED_NOLEFT = 5,
-       B_DC_PRED_NOTOPLEFT = 6 };
+       B_DC_PRED_NOTOPLEFT = 6,
+       NUM_B_DC_MODES = 7 };
 
 enum { MB_FEATURE_TREE_PROBS = 3,
        NUM_MB_SEGMENTS = 4,
@@ -162,7 +168,7 @@ typedef struct {
 // VP8Decoder: the main opaque structure handed over to user
 
 struct VP8Decoder {
-  int status_;    // 0 = OK
+  VP8StatusCode status_;
   int ready_;     // true if ready to decode a picture with VP8Decode()
   const char* error_msg_;  // set when status_ is not OK.
 
@@ -246,7 +252,8 @@ struct VP8Decoder {
 // internal functions. Not public.
 
 // in vp8.c
-int VP8SetError(VP8Decoder* const dec, int error, const char *msg);
+int VP8SetError(VP8Decoder* const dec,
+                VP8StatusCode error, const char * const msg);
 
 // in tree.c
 void VP8ResetProba(VP8Proba* const proba);
@@ -262,8 +269,10 @@ int VP8InitFrame(VP8Decoder* const dec, VP8Io* io);
 void VP8ReconstructBlock(VP8Decoder* const dec);
 // Store a block, along with filtering params
 void VP8StoreBlock(VP8Decoder* const dec);
-// Finalize and transmit a complete row
-void VP8FinishRow(VP8Decoder* const dec, VP8Io* io);
+// Finalize and transmit a complete row. Return false in case of user-abort.
+int VP8FinishRow(VP8Decoder* const dec, VP8Io* io);
+// Decode one macroblock. Returns false if there is not enough data.
+int VP8DecodeMB(VP8Decoder* const dec, VP8BitReader* const token_br);
 
 // in dsp.c
 typedef void (*VP8Idct)(const int16_t* coeffs, uint8_t* dst);
@@ -276,12 +285,12 @@ extern void (*VP8TransformWHT)(const int16_t* in, int16_t* out);
 // *dst is the destination block, with stride BPS. Boundary samples are
 // assumed accessible when needed.
 typedef void (*VP8PredFunc)(uint8_t *dst);
-extern VP8PredFunc VP8PredLuma16[7];
-extern VP8PredFunc VP8PredChroma8[7];
-extern VP8PredFunc VP8PredLuma4[11];
+extern VP8PredFunc VP8PredLuma16[NUM_B_DC_MODES];
+extern VP8PredFunc VP8PredChroma8[NUM_B_DC_MODES];
+extern VP8PredFunc VP8PredLuma4[NUM_BMODES];
 
-void VP8DspInit();        // must be called before anything using the above
-void VP8DspInitTables();  // needs to be called no matter what.
+void VP8DspInit(void);        // must be called before anything using the above
+void VP8DspInitTables(void);  // needs to be called no matter what.
 
 // simple filter (only for luma)
 typedef void (*VP8SimpleFilterFunc)(uint8_t* p, int stride, int thresh);
@@ -313,4 +322,4 @@ extern VP8ChromaFilterFunc VP8HFilter8i;
 }    // extern "C"
 #endif
 
-#endif  // WEBP_DECODE_VP8I_H_
+#endif  // WEBP_DEC_VP8I_H_

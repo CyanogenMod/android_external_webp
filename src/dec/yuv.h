@@ -9,8 +9,8 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
-#ifndef WEBP_DECODE_YUV_H_
-#define WEBP_DECODE_YUV_H_
+#ifndef WEBP_DEC_YUV_H_
+#define WEBP_DEC_YUV_H_
 
 #include "webp/decode_vp8.h"
 
@@ -57,10 +57,10 @@ inline static void VP8YuvToBgra(int y, int u, int v, uint8_t* const bgra) {
 }
 
 // Must be called before everything, to initialize the tables.
-void VP8YUVInit();
+void VP8YUVInit(void);
 
 #if defined(__cplusplus) || defined(c_plusplus)
 }    // extern "C"
 #endif
 
-#endif  // WEBP_DECODE_YUV_H_
+#endif  // WEBP_DEC_YUV_H_
