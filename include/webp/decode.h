@@ -191,7 +191,6 @@ uint8_t* WebPIDecGetYUV(const WebPIDecoder* const idec, int* last_y,
                         uint8_t** u, uint8_t** v,
                         int* width, int* height, int* stride, int* uv_stride);
 
-
 #if defined(__cplusplus) || defined(c_plusplus)
 }    // extern "C"
 #endif

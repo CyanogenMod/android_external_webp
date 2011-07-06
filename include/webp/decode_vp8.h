@@ -40,6 +40,10 @@ extern "C" {
 
 // Input / Output
 typedef struct VP8Io VP8Io;
+typedef int (*VP8IoPutHook)(const VP8Io* io);
+typedef int (*VP8IoSetupHook)(VP8Io* io);
+typedef void (*VP8IoTeardownHook)(const VP8Io* io);
+
 struct VP8Io {
   // set by VP8GetHeaders()
   int width, height;         // picture dimensions, in pixels
@@ -57,14 +61,14 @@ struct VP8Io {
   // YUV420 format, and can be up to width x 24 in size (depending on the
   // in-loop filtering level, e.g.). Should return false in case of error
   // or abort request.
-  int (*put)(const VP8Io* io);
+  VP8IoPutHook put;
 
   // called just before starting to decode the blocks.
   // Should returns 0 in case of error.
-  int (*setup)(VP8Io* io);
+  VP8IoSetupHook setup;
 
   // called just after block decoding is finished (or when an error occurred).
-  void (*teardown)(const VP8Io* io);
+  VP8IoTeardownHook teardown;
 
   // this is a recommendation for the user-side yuv->rgb converter. This flag
   // is set when calling setup() hook and can be overwritten by it. It then
@@ -84,6 +88,15 @@ struct VP8Io {
 
 // Internal, version-checked, entry point
 int VP8InitIoInternal(VP8Io* const, int);
+
+// Set the custom IO function pointers and user-data. The setter for IO hooks
+// should be called before initiating incremental decoding. Returns true if
+// WebPIdecoder object is successfully modified, false otherwise.
+int WebPISetIOHooks(WebPIDecoder* const idec,
+                    VP8IoPutHook put,
+                    VP8IoSetupHook setup,
+                    VP8IoTeardownHook teardown,
+                    void* user_data);
 
 // Main decoding object. This is an opaque structure.
 typedef struct VP8Decoder VP8Decoder;

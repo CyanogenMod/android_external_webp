@@ -305,7 +305,6 @@ static VP8StatusCode DecodePartition0(WebPIDecoder* const idec) {
     return VP8_STATUS_SUSPENDED;
   }
 
-  io->opaque = &idec->params_;
   if (!VP8GetHeaders(dec, io)) {
     const VP8StatusCode status = dec->status_;
     if (status == VP8_STATUS_SUSPENDED ||
@@ -433,6 +432,7 @@ WebPIDecoder* WebPINew(WEBP_CSP_MODE mode) {
 
   InitMemBuffer(&idec->mem_);
   VP8InitIo(&idec->io_);
+  idec->io_.opaque = &idec->params_;
   WebPInitCustomIo(&idec->io_);
   return idec;
 }
@@ -570,6 +570,23 @@ uint8_t* WebPIDecGetYUV(const WebPIDecoder* const idec, int *last_y,
   if (uv_stride) *uv_stride = idec->params_.u_stride;
 
   return idec->params_.output;
+}
+
+int WebPISetIOHooks(WebPIDecoder* const idec,
+                    VP8IoPutHook put,
+                    VP8IoSetupHook setup,
+                    VP8IoTeardownHook teardown,
+                    void* user_data) {
+  if (!idec || !idec->dec_ || idec->state_ > STATE_HEADER) {
+    return 0;
+  }
+
+  idec->io_.put = put;
+  idec->io_.setup = setup;
+  idec->io_.teardown = teardown;
+  idec->io_.opaque = user_data;
+
+  return 1;
 }
 
 #if defined(__cplusplus) || defined(c_plusplus)
