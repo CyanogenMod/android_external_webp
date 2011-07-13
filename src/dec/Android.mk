@@ -16,10 +16,16 @@ LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES := \
+	alpha.c \
 	bits.c \
+	buffer.c \
 	dsp.c \
+	dsp_sse2.c \
 	frame.c \
 	idec.c \
+	io.c \
+	io_sse2.c \
+	layer.c \
 	quant.c \
 	tree.c \
 	vp8.c \

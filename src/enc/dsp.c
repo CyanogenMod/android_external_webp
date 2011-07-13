@@ -17,6 +17,54 @@ extern "C" {
 #endif
 
 //-----------------------------------------------------------------------------
+// Compute susceptibility based on DCT-coeff histograms:
+// the higher, the "easier" the macroblock is to compress.
+
+static int ClipAlpha(int alpha) {
+  return alpha < 0 ? 0 : alpha > 255 ? 255 : alpha;
+}
+
+int VP8GetAlpha(const int histo[MAX_COEFF_THRESH + 1]) {
+  int num = 0, den = 0, val = 0;
+  int k;
+  int alpha;
+  // note: changing this loop to avoid the numerous "k + 1" slows things down.
+  for (k = 0; k < MAX_COEFF_THRESH; ++k) {
+    if (histo[k + 1]) {
+      val += histo[k + 1];
+      num += val * (k + 1);
+      den += (k + 1) * (k + 1);
+    }
+  }
+  // we scale the value to a usable [0..255] range
+  alpha = den ? 10 * num / den - 5 : 0;
+  return ClipAlpha(alpha);
+}
+
+static int CollectHistogram(const uint8_t* ref, const uint8_t* pred,
+                            int start_block, int end_block) {
+  int histo[MAX_COEFF_THRESH + 1] = { 0 };
+  int16_t out[16];
+  int j, k;
+  for (j = start_block; j < end_block; ++j) {
+    VP8FTransform(ref + VP8Scan[j], pred + VP8Scan[j], out);
+
+    // Convert coefficients to bin (within out[]).
+    for (k = 0; k < 16; ++k) {
+      const int v = abs(out[k]) >> 2;
+      out[k] = (v > MAX_COEFF_THRESH) ? MAX_COEFF_THRESH : v;
+    }
+
+    // Use bin to update histogram.
+    for (k = 0; k < 16; ++k) {
+      histo[out[k]]++;
+    }
+  }
+
+  return VP8GetAlpha(histo);
+}
+
+//-----------------------------------------------------------------------------
 // run-time tables (~4k)
 
 static uint8_t clip1[255 + 510 + 1];    // clips [-255,510] to [0,255]
@@ -49,7 +97,8 @@ static const int kC1 = 20091 + (1 << 16);
 static const int kC2 = 35468;
 #define MUL(a, b) (((a) * (b)) >> 16)
 
-static void ITransform(const uint8_t* ref, const int16_t* in, uint8_t* dst) {
+static inline void ITransformOne(const uint8_t* ref, const int16_t* in,
+                                 uint8_t* dst) {
   int C[4 * 4], *tmp;
   int i;
   tmp = C;
@@ -78,6 +127,14 @@ static void ITransform(const uint8_t* ref, const int16_t* in, uint8_t* dst) {
     STORE(2, i, b - c);
     STORE(3, i, a - d);
     tmp++;
+  }
+}
+
+static void ITransform(const uint8_t* ref, const int16_t* in, uint8_t* dst,
+                       int do_two) {
+  ITransformOne(ref, in, dst);
+  if (do_two) {
+    ITransformOne(ref + 4, in + 16, dst + 4);
   }
 }
 
@@ -165,12 +222,6 @@ static void FTransformWHT(const int16_t* in, int16_t* out) {
     out[12 + i] = (b3 + (b3 > 0) + 3) >> 3;
   }
 }
-
-// default C implementations:
-VP8Idct VP8ITransform = ITransform;
-VP8Fdct VP8FTransform = FTransform;
-VP8WHT VP8ITransformWHT = ITransformWHT;
-VP8WHT VP8FTransformWHT = FTransformWHT;
 
 #undef MUL
 #undef STORE
@@ -478,11 +529,6 @@ static void Intra4Preds(uint8_t* dst, const uint8_t* top) {
   HU4(I4HU4 + dst, top);
 }
 
-// default C implementations
-VP8Intra4Preds VP8EncPredLuma4 = Intra4Preds;
-VP8IntraPreds VP8EncPredLuma16 = Intra16Preds;
-VP8IntraPreds VP8EncPredChroma8 = IntraChromaPreds;
-
 //-----------------------------------------------------------------------------
 // Metric
 
@@ -513,12 +559,6 @@ static int SSE4x4(const uint8_t* a, const uint8_t* b) {
   return GetSSE(a, b, 4, 4);
 }
 
-// default C implementations
-VP8Metric VP8SSE16x16 = SSE16x16;
-VP8Metric VP8SSE8x8 = SSE8x8;
-VP8Metric VP8SSE16x8 = SSE16x8;
-VP8Metric VP8SSE4x4 = SSE4x4;
-
 //-----------------------------------------------------------------------------
 // Texture distortion
 //
@@ -526,9 +566,12 @@ VP8Metric VP8SSE4x4 = SSE4x4;
 // reconstructed samples.
 
 // Hadamard transform
-static void TTransform(const uint8_t* in, int16_t* out) {
+// Returns the weighted sum of the absolute value of transformed coefficients.
+static int TTransform(const uint8_t* in, const uint16_t* w) {
+  int sum = 0;
   int tmp[16];
   int i;
+  // horizontal pass
   for (i = 0; i < 4; ++i, in += BPS) {
     const int a0 = (in[0] + in[2]) << 2;
     const int a1 = (in[1] + in[3]) << 2;
@@ -539,7 +582,8 @@ static void TTransform(const uint8_t* in, int16_t* out) {
     tmp[2 + i * 4] = a3 - a2;
     tmp[3 + i * 4] = a0 - a1;
   }
-  for (i = 0; i < 4; ++i) {
+  // vertical pass
+  for (i = 0; i < 4; ++i, ++w) {
     const int a0 = (tmp[0 + i] + tmp[8 + i]);
     const int a1 = (tmp[4 + i] + tmp[12+ i]);
     const int a2 = (tmp[4 + i] - tmp[12+ i]);
@@ -548,24 +592,20 @@ static void TTransform(const uint8_t* in, int16_t* out) {
     const int b1 = a3 + a2;
     const int b2 = a3 - a2;
     const int b3 = a0 - a1;
-    out[ 0 + i] = (b0 + (b0 < 0) + 3) >> 3;
-    out[ 4 + i] = (b1 + (b1 < 0) + 3) >> 3;
-    out[ 8 + i] = (b2 + (b2 < 0) + 3) >> 3;
-    out[12 + i] = (b3 + (b3 < 0) + 3) >> 3;
+    // abs((b + (b<0) + 3) >> 3) = (abs(b) + 3) >> 3
+    sum += w[ 0] * ((abs(b0) + 3) >> 3);
+    sum += w[ 4] * ((abs(b1) + 3) >> 3);
+    sum += w[ 8] * ((abs(b2) + 3) >> 3);
+    sum += w[12] * ((abs(b3) + 3) >> 3);
   }
+  return sum;
 }
 
 static int Disto4x4(const uint8_t* const a, const uint8_t* const b,
                     const uint16_t* const w) {
-  int16_t tmp1[16], tmp2[16];
-  int k;
-  int D;
-  TTransform(a, tmp1);
-  TTransform(b, tmp2);
-  D = 0;
-  for (k = 0; k < 16; ++k)
-    D += w[k] * (abs(tmp2[k]) - abs(tmp1[k]));
-  return (abs(D) + 8) >> 4;
+  const int sum1 = TTransform(a, w);
+  const int sum2 = TTransform(b, w);
+  return (abs(sum2 - sum1) + 8) >> 4;
 }
 
 static int Disto16x16(const uint8_t* const a, const uint8_t* const b,
@@ -579,9 +619,6 @@ static int Disto16x16(const uint8_t* const a, const uint8_t* const b,
   }
   return D;
 }
-
-VP8WMetric VP8TDisto4x4 = Disto4x4;
-VP8WMetric VP8TDisto16x16 = Disto16x16;
 
 //-----------------------------------------------------------------------------
 // Quantization
@@ -612,9 +649,6 @@ static int QuantizeBlock(int16_t in[16], int16_t out[16],
   return (last >= 0);
 }
 
-// default C implementation
-VP8QuantizeBlock VP8EncQuantizeBlock = QuantizeBlock;
-
 //-----------------------------------------------------------------------------
 // Block copy
 
@@ -631,15 +665,104 @@ static void Copy4x4(const uint8_t* src, uint8_t* dst) { Copy(src, dst, 4); }
 static void Copy8x8(const uint8_t* src, uint8_t* dst) { Copy(src, dst, 8); }
 static void Copy16x16(const uint8_t* src, uint8_t* dst) { Copy(src, dst, 16); }
 
-// default C implementations
-VP8BlockCopy VP8Copy4x4 = Copy4x4;
-VP8BlockCopy VP8Copy8x8 = Copy8x8;
-VP8BlockCopy VP8Copy16x16 = Copy16x16;
-
 //-----------------------------------------------------------------------------
+// SSE2 detection.
+//
+
+#if defined(__pic__) && defined(__i386__)
+static inline void GetCPUInfo(int cpu_info[4], int info_type) {
+  __asm__ volatile (
+    "mov %%ebx, %%edi\n"
+    "cpuid\n"
+    "xchg %%edi, %%ebx\n"
+    : "=a"(cpu_info[0]), "=D"(cpu_info[1]), "=c"(cpu_info[2]), "=d"(cpu_info[3])
+    : "a"(info_type));
+}
+#elif defined(__i386__) || defined(__x86_64__)
+static inline void GetCPUInfo(int cpu_info[4], int info_type) {
+  __asm__ volatile (
+    "cpuid\n"
+    : "=a"(cpu_info[0]), "=b"(cpu_info[1]), "=c"(cpu_info[2]), "=d"(cpu_info[3])
+    : "a"(info_type));
+}
+#elif defined(_MSC_VER)  // Visual C++
+#define GetCPUInfo __cpuid
+#endif
+
+#if defined(__i386__) || defined(__x86_64__) || defined(_MSC_VER)
+static int x86CPUInfo(CPUFeature feature) {
+  int cpu_info[4];
+  GetCPUInfo(cpu_info, 1);
+  if (feature == kSSE2) {
+    return 0 != (cpu_info[3] & 0x04000000);
+  }
+  if (feature == kSSE3) {
+    return 0 != (cpu_info[2] & 0x00000001);
+  }
+  return 0;
+}
+VP8CPUInfo VP8EncGetCPUInfo = x86CPUInfo;
+#else
+VP8CPUInfo VP8EncGetCPUInfo = NULL;
+#endif
+
+// Speed-critical function pointers. We have to initialize them to the default
+// implementations within VP8EncDspInit().
+VP8CHisto VP8CollectHistogram;
+VP8Idct VP8ITransform;
+VP8Fdct VP8FTransform;
+VP8WHT VP8ITransformWHT;
+VP8WHT VP8FTransformWHT;
+VP8Intra4Preds VP8EncPredLuma4;
+VP8IntraPreds VP8EncPredLuma16;
+VP8IntraPreds VP8EncPredChroma8;
+VP8Metric VP8SSE16x16;
+VP8Metric VP8SSE8x8;
+VP8Metric VP8SSE16x8;
+VP8Metric VP8SSE4x4;
+VP8WMetric VP8TDisto4x4;
+VP8WMetric VP8TDisto16x16;
+VP8QuantizeBlock VP8EncQuantizeBlock;
+VP8BlockCopy VP8Copy4x4;
+VP8BlockCopy VP8Copy8x8;
+VP8BlockCopy VP8Copy16x16;
+
+extern void VP8EncDspInitSSE2(void);
 
 void VP8EncDspInit(void) {
   InitTables();
+
+  // default C implementations
+  VP8CollectHistogram = CollectHistogram;
+  VP8ITransform = ITransform;
+  VP8FTransform = FTransform;
+  VP8ITransformWHT = ITransformWHT;
+  VP8FTransformWHT = FTransformWHT;
+  VP8EncPredLuma4 = Intra4Preds;
+  VP8EncPredLuma16 = Intra16Preds;
+  VP8EncPredChroma8 = IntraChromaPreds;
+  VP8SSE16x16 = SSE16x16;
+  VP8SSE8x8 = SSE8x8;
+  VP8SSE16x8 = SSE16x8;
+  VP8SSE4x4 = SSE4x4;
+  VP8TDisto4x4 = Disto4x4;
+  VP8TDisto16x16 = Disto16x16;
+  VP8EncQuantizeBlock = QuantizeBlock;
+  VP8Copy4x4 = Copy4x4;
+  VP8Copy8x8 = Copy8x8;
+  VP8Copy16x16 = Copy16x16;
+
+  // If defined, use CPUInfo() to overwrite some pointers with faster versions.
+  if (VP8EncGetCPUInfo) {
+    if (VP8EncGetCPUInfo(kSSE2)) {
+#if defined(__SSE2__) || defined(_MSC_VER)
+      VP8EncDspInitSSE2();
+#endif
+    }
+    if (VP8EncGetCPUInfo(kSSE3)) {
+      // later we'll plug some SSE3 variant here
+    }
+  }
 }
 
 #if defined(__cplusplus) || defined(c_plusplus)

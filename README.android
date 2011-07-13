@@ -17,6 +17,9 @@ Local modifications:
 - Added WebP Encoder (ver 0.1.2) as well
   - Removed some more unused Makefile.am & Makefile.in
   - Added Android.mk to encoder & decoder code levels.
+- Synced the WebP Code (Encoder/Decoder) with the head change#Ia53f845b
+  - Added three color-spaces viz ARGB_8888, RGBA_4444, RGB_565
+    supported by Android.
 
 The Android.mk file creates WebP Decoder and Encoder static libraries which
 can be added to any application by Adding to LOCAL_STATIC_LIBRARIES

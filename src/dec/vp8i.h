@@ -184,6 +184,10 @@ struct VP8Decoder {
   // dimension, in macroblock units.
   int mb_w_, mb_h_;
 
+  // Macroblock to process/filter, depending on cropping and filter_type.
+  int tl_mb_x_, tl_mb_y_;  // top-left MB that must be in-loop filtered
+  int br_mb_x_, br_mb_y_;  // last bottom-right MB that must be decoded
+
   // number of partitions.
   int num_parts_;
   // per-partition boolean decoders.
@@ -212,8 +216,8 @@ struct VP8Decoder {
   // Boundary data cache and persistent buffers.
   uint8_t* intra_t_;     // top intra modes values: 4 * mb_w_
   uint8_t  intra_l_[4];  // left intra modes values
-  uint8_t *y_t_;         // top luma samples: 16 * mb_w_
-  uint8_t *u_t_, *v_t_;  // top u/v samples: 8 * mb_w_ each
+  uint8_t* y_t_;         // top luma samples: 16 * mb_w_
+  uint8_t* u_t_, *v_t_;  // top u/v samples: 8 * mb_w_ each
 
   VP8MB* mb_info_;       // contextual macroblock infos (mb_w_ + 1)
   uint8_t* yuv_b_;       // main block for Y/U/V (size = YUV_SIZE)
@@ -244,8 +248,17 @@ struct VP8Decoder {
   uint32_t non_zero_ac_;
 
   // Filtering side-info
-  int filter_type_;                       // 0=off, 1=simple, 2=complex
+  int filter_type_;                         // 0=off, 1=simple, 2=complex
   uint8_t filter_levels_[NUM_MB_SEGMENTS];  // precalculated per-segment
+
+  // extensions
+  const uint8_t* alpha_data_;   // compressed alpha data (if present)
+  size_t alpha_data_size_;
+  uint8_t* alpha_plane_;        // output
+
+  int layer_colorspace_;
+  const uint8_t* layer_data_;   // compressed layer data (if present)
+  size_t layer_data_size_;
 };
 
 //-----------------------------------------------------------------------------
@@ -254,6 +267,13 @@ struct VP8Decoder {
 // in vp8.c
 int VP8SetError(VP8Decoder* const dec,
                 VP8StatusCode error, const char * const msg);
+// Validates the VP8 data-header and retrieve basic header information viz width
+// and height. Returns 0 in case of formatting error. *width/*height/*has_alpha
+// can be passed NULL.
+int VP8GetInfo(const uint8_t* data,
+               uint32_t data_size,    // data available so far
+               uint32_t chunk_size,   // total data size expect in the chunk
+               int *width, int *height, int *has_alpha);
 
 // in tree.c
 void VP8ResetProba(VP8Proba* const proba);
@@ -267,16 +287,29 @@ void VP8ParseQuant(VP8Decoder* const dec);
 int VP8InitFrame(VP8Decoder* const dec, VP8Io* io);
 // Predict a block and add residual
 void VP8ReconstructBlock(VP8Decoder* const dec);
+// Call io->setup() and finish setting up scan parameters.
+VP8StatusCode VP8FinishFrameSetup(VP8Decoder* const dec, VP8Io* const io);
+// Filter the decoded macroblock row (if needed)
+void VP8FilterRow(const VP8Decoder* const dec);
 // Store a block, along with filtering params
 void VP8StoreBlock(VP8Decoder* const dec);
 // Finalize and transmit a complete row. Return false in case of user-abort.
-int VP8FinishRow(VP8Decoder* const dec, VP8Io* io);
+int VP8FinishRow(VP8Decoder* const dec, VP8Io* const io);
 // Decode one macroblock. Returns false if there is not enough data.
 int VP8DecodeMB(VP8Decoder* const dec, VP8BitReader* const token_br);
 
+// in alpha.c
+const uint8_t* VP8DecompressAlphaRows(VP8Decoder* const dec,
+                                      int row, int num_rows);
+
+// in layer.c
+int VP8DecodeLayer(VP8Decoder* const dec);
+
 // in dsp.c
 typedef void (*VP8Idct)(const int16_t* coeffs, uint8_t* dst);
-extern VP8Idct VP8Transform;
+// when doing two transforms, coeffs is actually int16_t[2][16].
+typedef void (*VP8Idct2)(const int16_t* coeffs, uint8_t* dst, int do_two);
+extern VP8Idct2 VP8Transform;
 extern VP8Idct VP8TransformUV;
 extern VP8Idct VP8TransformDC;
 extern VP8Idct VP8TransformDCUV;
@@ -284,7 +317,7 @@ extern void (*VP8TransformWHT)(const int16_t* in, int16_t* out);
 
 // *dst is the destination block, with stride BPS. Boundary samples are
 // assumed accessible when needed.
-typedef void (*VP8PredFunc)(uint8_t *dst);
+typedef void (*VP8PredFunc)(uint8_t* dst);
 extern VP8PredFunc VP8PredLuma16[NUM_B_DC_MODES];
 extern VP8PredFunc VP8PredChroma8[NUM_B_DC_MODES];
 extern VP8PredFunc VP8PredLuma4[NUM_BMODES];
@@ -315,6 +348,14 @@ extern VP8LumaFilterFunc VP8VFilter16i;   // filtering 3 inner edges altogether
 extern VP8LumaFilterFunc VP8HFilter16i;
 extern VP8ChromaFilterFunc VP8VFilter8i;  // filtering u and v altogether
 extern VP8ChromaFilterFunc VP8HFilter8i;
+
+typedef enum {
+  kSSE2,
+  kSSE3
+} CPUFeature;
+// returns true if the CPU supports the feature.
+typedef int (*VP8CPUInfo)(CPUFeature feature);
+extern VP8CPUInfo VP8DecGetCPUInfo;
 
 //-----------------------------------------------------------------------------
 

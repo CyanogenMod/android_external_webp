@@ -148,11 +148,13 @@ void VP8IteratorExport(const VP8EncIterator* const it) {
       memcpy(ydst + i * pic->y_stride, ysrc + i * BPS, w);
     }
     // U/V plane
-    w = (w + 1) / 2;
-    h = (h + 1) / 2;
-    for (i = 0; i < h; ++i) {
-      memcpy(udst + i * pic->uv_stride, usrc + i * BPS, w);
-      memcpy(vdst + i * pic->uv_stride, vsrc + i * BPS, w);
+    {
+      const int uv_w = (w + 1) / 2;
+      const int uv_h = (h + 1) / 2;
+      for (i = 0; i < uv_h; ++i) {
+        memcpy(udst + i * pic->uv_stride, usrc + i * BPS, uv_w);
+        memcpy(vdst + i * pic->uv_stride, vsrc + i * BPS, uv_w);
+      }
     }
   }
 }
@@ -214,7 +216,8 @@ void VP8IteratorBytesToNz(VP8EncIterator* const it) {
   nz |= (it->top_nz_[6] << 22) | (it->top_nz_[7] << 23);
   nz |= (it->top_nz_[8] << 24);  // we propagate the _top_ bit, esp. for intra4
   // left
-  nz |= (it->left_nz_[0] << 3) | (it->left_nz_[1] << 7) | (it->left_nz_[2] << 11);
+  nz |= (it->left_nz_[0] << 3) | (it->left_nz_[1] << 7);
+  nz |= (it->left_nz_[2] << 11);
   nz |= (it->left_nz_[4] << 17) | (it->left_nz_[6] << 21);
 
   *it->nz_ = nz;

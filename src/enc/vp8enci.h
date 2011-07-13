@@ -28,6 +28,9 @@ extern "C" {
 #define ENC_MIN_VERSION 1
 #define ENC_REV_VERSION 2
 
+// size of histogram used by CollectHistogram.
+#define MAX_COEFF_THRESH   64
+
 // intra prediction modes
 enum { B_DC_PRED = 0,   // 4x4 modes
        B_TM_PRED = 1,
@@ -258,7 +261,7 @@ typedef struct {
   uint8_t*      preds_;            // intra mode predictors (4x4 blocks)
   uint32_t*     nz_;               // non-zero pattern
   uint8_t       i4_boundary_[37];  // 32+5 boundary samples needed by intra4x4
-  uint8_t*      i4_top_;           // pointer to the current *top boundary sample
+  uint8_t*      i4_top_;           // pointer to the current top boundary sample
   int           i4_;               // current intra4x4 mode being tested
   int           top_nz_[9];        // top-non-zero context.
   int           left_nz_[9];       // left-non-zero. left_nz[8] is independent.
@@ -325,6 +328,17 @@ struct VP8Encoder {
   // per-partition boolean decoders.
   VP8BitWriter bw_;                         // part0
   VP8BitWriter parts_[MAX_NUM_PARTITIONS];  // token partitions
+
+  // transparency blob
+  int has_alpha_;
+  uint8_t* alpha_data_;       // non-NULL if transparency is present
+  size_t alpha_data_size_;
+
+  // enhancement layer
+  int use_layer_;
+  VP8BitWriter layer_bw_;
+  uint8_t* layer_data_;
+  size_t layer_data_size_;
 
   // quantization info (one set of DC/AC dequant factor per segment)
   VP8SegmentInfo dqm_[NUM_MB_SEGMENTS];
@@ -403,7 +417,15 @@ int VP8GetCostUV(VP8EncIterator* const it, const VP8ModeScore* const rd);
 int VP8EncLoop(VP8Encoder* const enc);
 int VP8StatLoop(VP8Encoder* const enc);
 
+  // in webpenc.c
+// Assign an error code to a picture. Return false for convenience.
+int WebPEncodingSetError(WebPPicture* const pic, WebPEncodingError error);
   // in analysis.c
+// Compute susceptibility based on DCT-coeff histograms:
+// the higher, the "easier" the macroblock is to compress.
+typedef int (*VP8CHisto)(const uint8_t* ref, const uint8_t* pred,
+                         int start_block, int end_block);
+extern VP8CHisto VP8CollectHistogram;
 // Main analysis loop. Decides the segmentations and complexity.
 // Assigns a first guess for Intra16 and uvmode_ prediction modes.
 int VP8EncAnalyze(VP8Encoder* const enc);
@@ -414,9 +436,26 @@ void VP8SetSegmentParams(VP8Encoder* const enc, float quality);
 // Pick best modes and fills the levels. Returns true if skipped.
 int VP8Decimate(VP8EncIterator* const it, VP8ModeScore* const rd, int rd_opt);
 
+  // in alpha.c
+void VP8EncInitAlpha(VP8Encoder* enc);           // initialize alpha compression
+void VP8EncCodeAlphaBlock(VP8EncIterator* it);   // analyze or code a macroblock
+int VP8EncFinishAlpha(VP8Encoder* enc);          // finalize compressed data
+void VP8EncDeleteAlpha(VP8Encoder* enc);         // delete compressed data
+
+  // in layer.c
+void VP8EncInitLayer(VP8Encoder* const enc);     // init everything
+void VP8EncCodeLayerBlock(VP8EncIterator* it);   // code one more macroblock
+int VP8EncFinishLayer(VP8Encoder* const enc);    // finalize coding
+void VP8EncDeleteLayer(VP8Encoder* enc);         // reclaim memory
+
   // in dsp.c
+int VP8GetAlpha(const int histo[MAX_COEFF_THRESH + 1]);
+
 // Transforms
-typedef void (*VP8Idct)(const uint8_t* ref, const int16_t* in, uint8_t* dst);
+// VP8Idct: Does one of two inverse transforms. If do_two is set, the transforms
+//          will be done for (ref, in, dst) and (ref + 4, in + 16, dst + 4).
+typedef void (*VP8Idct)(const uint8_t* ref, const int16_t* in, uint8_t* dst,
+                        int do_two);
 typedef void (*VP8Fdct)(const uint8_t* src, const uint8_t* ref, int16_t* out);
 typedef void (*VP8WHT)(const int16_t* in, int16_t* out);
 extern VP8Idct VP8ITransform;
@@ -453,7 +492,7 @@ typedef enum {
 } CPUFeature;
 // returns true if the CPU supports the feature.
 typedef int (*VP8CPUInfo)(CPUFeature feature);
-extern VP8CPUInfo CPUInfo;
+extern VP8CPUInfo VP8EncGetCPUInfo;
 
 void VP8EncDspInit(void);   // must be called before using any of the above
 

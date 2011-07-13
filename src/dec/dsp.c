@@ -11,10 +11,6 @@
 
 #include "vp8i.h"
 
-#if defined(__SSE2__)
-#include <emmintrin.h>
-#endif
-
 #if defined(__cplusplus) || defined(c_plusplus)
 extern "C" {
 #endif
@@ -66,7 +62,7 @@ static const int kC1 = 20091 + (1 << 16);
 static const int kC2 = 35468;
 #define MUL(a, b) (((a) * (b)) >> 16)
 
-static void Transform(const int16_t* in, uint8_t* dst) {
+static void TransformOne(const int16_t* in, uint8_t* dst) {
   int C[4 * 4], *tmp;
   int i;
   tmp = C;
@@ -106,11 +102,16 @@ static void Transform(const int16_t* in, uint8_t* dst) {
 }
 #undef MUL
 
+static void TransformTwo(const int16_t* in, uint8_t* dst, int do_two) {
+  TransformOne(in, dst);
+  if (do_two) {
+    TransformOne(in + 16, dst + 4);
+  }
+}
+
 static void TransformUV(const int16_t* in, uint8_t* dst) {
-  Transform(in + 0 * 16, dst);
-  Transform(in + 1 * 16, dst + 4);
-  Transform(in + 2 * 16, dst + 4 * BPS);
-  Transform(in + 3 * 16, dst + 4 * BPS + 4);
+  VP8Transform(in + 0 * 16, dst, 1);
+  VP8Transform(in + 2 * 16, dst + 4 * BPS, 1);
 }
 
 static void TransformDC(const int16_t *in, uint8_t* dst) {
@@ -133,7 +134,7 @@ static void TransformDCUV(const int16_t* in, uint8_t* dst) {
 #undef STORE
 
 // default C implementations:
-VP8Idct VP8Transform = Transform;
+VP8Idct2 VP8Transform = TransformTwo;
 VP8Idct VP8TransformUV = TransformUV;
 VP8Idct VP8TransformDC = TransformDC;
 VP8Idct VP8TransformDCUV = TransformDCUV;
@@ -686,9 +687,62 @@ void (*VP8SimpleVFilter16i)(uint8_t*, int, int) = SimpleVFilter16i;
 void (*VP8SimpleHFilter16i)(uint8_t*, int, int) = SimpleHFilter16i;
 
 //-----------------------------------------------------------------------------
+// SSE2 detection.
+//
+
+#if defined(__pic__) && defined(__i386__)
+static inline void GetCPUInfo(int cpu_info[4], int info_type) {
+  __asm__ volatile (
+    "mov %%ebx, %%edi\n"
+    "cpuid\n"
+    "xchg %%edi, %%ebx\n"
+    : "=a"(cpu_info[0]), "=D"(cpu_info[1]), "=c"(cpu_info[2]), "=d"(cpu_info[3])
+    : "a"(info_type));
+}
+#elif defined(__i386__) || defined(__x86_64__)
+static inline void GetCPUInfo(int cpu_info[4], int info_type) {
+  __asm__ volatile (
+    "cpuid\n"
+    : "=a"(cpu_info[0]), "=b"(cpu_info[1]), "=c"(cpu_info[2]), "=d"(cpu_info[3])
+    : "a"(info_type));
+}
+#elif defined(_MSC_VER)  // Visual C++
+#define GetCPUInfo __cpuid
+#endif
+
+#if defined(__i386__) || defined(__x86_64__) || defined(_MSC_VER)
+static int x86CPUInfo(CPUFeature feature) {
+  int cpu_info[4];
+  GetCPUInfo(cpu_info, 1);
+  if (feature == kSSE2) {
+    return 0 != (cpu_info[3] & 0x04000000);
+  }
+  if (feature == kSSE3) {
+    return 0 != (cpu_info[2] & 0x00000001);
+  }
+  return 0;
+}
+VP8CPUInfo VP8DecGetCPUInfo = x86CPUInfo;
+#else
+VP8CPUInfo VP8DecGetCPUInfo = NULL;
+#endif
+
+//-----------------------------------------------------------------------------
+
+extern void VP8DspInitSSE2(void);
 
 void VP8DspInit(void) {
-  // later we'll plug some SSE2 variant here
+  // If defined, use CPUInfo() to overwrite some pointers with faster versions.
+  if (VP8DecGetCPUInfo) {
+    if (VP8DecGetCPUInfo(kSSE2)) {
+#if defined(__SSE2__) || defined(_MSC_VER)
+      VP8DspInitSSE2();
+#endif
+    }
+    if (VP8DecGetCPUInfo(kSSE3)) {
+      // later we'll plug some SSE3 variant here
+    }
+  }
 }
 
 #if defined(__cplusplus) || defined(c_plusplus)

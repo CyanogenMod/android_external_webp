@@ -9,6 +9,7 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -53,6 +54,7 @@ int WebPPictureInitInternal(WebPPicture* const picture, int version) {
   if (picture) {
     memset(picture, 0, sizeof(*picture));
     picture->writer = DummyWriter;
+    WebPEncodingSetError(picture, VP8_ENC_OK);
   }
   return 1;
 }
@@ -155,7 +157,8 @@ static VP8Encoder* InitEncoder(const WebPConfig* const config,
                                16 + 16 + 16 + 8 + 1 +   // left y/u/v
                                2 * ALIGN_CST)           // align all
                                * sizeof(uint8_t);
-  const size_t lf_stats_size = config->autofilter ? sizeof(LFStats) : 0;
+  const size_t lf_stats_size =
+      config->autofilter ? sizeof(LFStats) + ALIGN_CST : 0;
   VP8Encoder* enc;
   uint8_t* mem;
   size_t size = sizeof(VP8Encoder) + ALIGN_CST  // main struct
@@ -193,7 +196,10 @@ static VP8Encoder* InitEncoder(const WebPConfig* const config,
   printf("===================================\n");
 #endif
   mem = (uint8_t*)malloc(size);
-  if (mem == NULL) return NULL;
+  if (mem == NULL) {
+    WebPEncodingSetError(picture, VP8_ENC_ERROR_OUT_OF_MEMORY);
+    return NULL;
+  }
   enc = (VP8Encoder*)mem;
   mem = (uint8_t*)DO_ALIGN(mem + sizeof(*enc));
   memset(enc, 0, sizeof(*enc));
@@ -215,7 +221,7 @@ static VP8Encoder* InitEncoder(const WebPConfig* const config,
   mem += preds_w * preds_h * sizeof(uint8_t);
   enc->nz_ = 1 + (uint32_t*)mem;
   mem += nz_size;
-  enc->lf_stats_ = lf_stats_size ? (LFStats*)mem : NULL;
+  enc->lf_stats_ = lf_stats_size ? (LFStats*)DO_ALIGN(mem) : NULL;
   mem += lf_stats_size;
 
   // top samples (all 16-aligned)
@@ -242,11 +248,22 @@ static VP8Encoder* InitEncoder(const WebPConfig* const config,
   ResetFilterHeader(enc);
   ResetBoundaryPredictions(enc);
 
+#ifdef WEBP_EXPERIMENTAL_FEATURES
+  VP8EncInitAlpha(enc);
+  VP8EncInitLayer(enc);
+#endif
+
   return enc;
 }
 
 static void DeleteEncoder(VP8Encoder* enc) {
-  free(enc);
+  if (enc) {
+#ifdef WEBP_EXPERIMENTAL_FEATURES
+    VP8EncDeleteAlpha(enc);
+    VP8EncDeleteLayer(enc);
+#endif
+    free(enc);
+  }
 }
 
 //-----------------------------------------------------------------------------
@@ -284,31 +301,46 @@ static void StoreStats(VP8Encoder* const enc) {
   }
 }
 
+int WebPEncodingSetError(WebPPicture* const pic, WebPEncodingError error) {
+  assert((int)error <= VP8_ENC_ERROR_BAD_WRITE);
+  assert((int)error >= VP8_ENC_OK);
+  pic->error_code = error;
+  return 0;
+}
+
 //-----------------------------------------------------------------------------
 
 int WebPEncode(const WebPConfig* const config, WebPPicture* const pic) {
   VP8Encoder* enc;
   int ok;
 
-  if (config == NULL || pic == NULL)
-    return 0;   // bad params
+  if (pic == NULL)
+    return 0;
+  WebPEncodingSetError(pic, VP8_ENC_OK);  // all ok so far
+  if (config == NULL)  // bad params
+    return WebPEncodingSetError(pic, VP8_ENC_ERROR_NULL_PARAMETER);
   if (!WebPValidateConfig(config))
-    return 0;   // invalid config.
+    return WebPEncodingSetError(pic, VP8_ENC_ERROR_INVALID_CONFIGURATION);
   if (pic->width <= 0 || pic->height <= 0)
-    return 0;   // invalid parameters
+    return WebPEncodingSetError(pic, VP8_ENC_ERROR_BAD_DIMENSION);
   if (pic->y == NULL || pic->u == NULL || pic->v == NULL)
-    return 0;   // invalid parameters
+    return WebPEncodingSetError(pic, VP8_ENC_ERROR_NULL_PARAMETER);
   if (pic->width >= MAX_DIMENSION || pic->height >= MAX_DIMENSION)
-    return 0;   // image is too big
+    return WebPEncodingSetError(pic, VP8_ENC_ERROR_BAD_DIMENSION);
 
   enc = InitEncoder(config, pic);
-  if (enc == NULL) return 0;
+  if (enc == NULL) return 0;  // pic->error is already set.
   ok = VP8EncAnalyze(enc)
     && VP8StatLoop(enc)
     && VP8EncLoop(enc)
+#ifdef WEBP_EXPERIMENTAL_FEATURES
+    && VP8EncFinishAlpha(enc)
+    && VP8EncFinishLayer(enc)
+#endif
     && VP8EncWrite(enc);
   StoreStats(enc);
   DeleteEncoder(enc);
+
   return ok;
 }
 

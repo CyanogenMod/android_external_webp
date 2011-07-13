@@ -16,14 +16,17 @@ LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES := \
+	alpha.c \
 	analysis.c \
 	bit_writer.c \
 	config.c \
 	cost.c \
 	dsp.c \
+	dsp_sse2.c \
 	filter.c \
 	frame.c \
 	iterator.c \
+	layer.c \
 	picture.c \
 	quant.c \
 	syntax.c \

@@ -10,7 +10,7 @@
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include <stdlib.h>
-#include "vp8i.h"
+#include "./vp8i.h"
 
 #if defined(__cplusplus) || defined(c_plusplus)
 extern "C" {
@@ -18,11 +18,15 @@ extern "C" {
 
 #define ALIGN_MASK (32 - 1)
 
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Memory setup
 
-// how many extra luma lines are needed for caching, given a filtering level
-static const uint8_t kFilterExtraRows[3] = { 0, 4, 8 };
+// kFilterExtraRows[] = How many extra lines are needed on the MB boundary
+// for caching, given a filtering level.
+// Simple filter:  up to 2 luma samples are read and 1 is written.
+// Complex filter: up to 4 luma samples are read and 3 are written. Same for
+//                 U/V, so it's 8 samples total (because of the 2x upsampling).
+static const uint8_t kFilterExtraRows[3] = { 0, 2, 8 };
 
 int VP8InitFrame(VP8Decoder* const dec, VP8Io* io) {
   const int mb_w = dec->mb_w_;
@@ -33,10 +37,12 @@ int VP8InitFrame(VP8Decoder* const dec, VP8Io* io) {
   const int coeffs_size = 384 * sizeof(*dec->coeffs_);
   const int cache_height = (16 + kFilterExtraRows[dec->filter_type_]) * 3 / 2;
   const int cache_size = top_size * cache_height;
+  const int alpha_size =
+    dec->alpha_data_ ? (dec->pic_hdr_.width_ * dec->pic_hdr_.height_) : 0;
   const int needed = intra_pred_mode_size
                    + top_size + info_size
                    + yuv_size + coeffs_size
-                   + cache_size + ALIGN_MASK;
+                   + cache_size + alpha_size + ALIGN_MASK;
   uint8_t* mem;
 
   if (needed > dec->mem_size_) {
@@ -84,6 +90,10 @@ int VP8InitFrame(VP8Decoder* const dec, VP8Io* io) {
   }
   mem += cache_size;
 
+  // alpha plane
+  dec->alpha_plane_ = alpha_size ? (uint8_t*)mem : NULL;
+  mem += alpha_size;
+
   // note: left-info is initialized once for all.
   memset(dec->mb_info_ - 1, 0, (mb_w + 1) * sizeof(*dec->mb_info_));
 
@@ -91,15 +101,14 @@ int VP8InitFrame(VP8Decoder* const dec, VP8Io* io) {
   memset(dec->intra_t_, B_DC_PRED, intra_pred_mode_size);
 
   // prepare 'io'
-  io->width = dec->pic_hdr_.width_;
-  io->height = dec->pic_hdr_.height_;
   io->mb_y = 0;
   io->y = dec->cache_y_;
   io->u = dec->cache_u_;
   io->v = dec->cache_v_;
   io->y_stride = dec->cache_y_stride_;
   io->uv_stride = dec->cache_uv_stride_;
-  io->fancy_upscaling = 0;    // default
+  io->fancy_upsampling = 0;    // default
+  io->a = NULL;
 
   // Init critical function pointers and look-up tables.
   VP8DspInitTables();
@@ -108,7 +117,7 @@ int VP8InitFrame(VP8Decoder* const dec, VP8Io* io) {
   return 1;
 }
 
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Filtering
 
 static inline int hev_thresh_from_level(int level, int keyframe) {
@@ -119,7 +128,7 @@ static inline int hev_thresh_from_level(int level, int keyframe) {
   }
 }
 
-static void DoFilter(VP8Decoder* const dec, int mb_x, int mb_y) {
+static void DoFilter(const VP8Decoder* const dec, int mb_x, int mb_y) {
   VP8MB* const mb = dec->mb_info_ + mb_x;
   uint8_t* const y_dst = dec->cache_y_ + mb_x * 16;
   const int y_bps = dec->cache_y_stride_;
@@ -166,6 +175,19 @@ static void DoFilter(VP8Decoder* const dec, int mb_x, int mb_y) {
     }
   }
 }
+
+void VP8FilterRow(const VP8Decoder* const dec) {
+  int mb_x;
+  assert(dec->filter_type_ > 0);
+  if (dec->mb_y_ < dec->tl_mb_y_ || dec->mb_y_ > dec->br_mb_y_) {
+    return;
+  }
+  for (mb_x = dec->tl_mb_x_; mb_x < dec->br_mb_x_; ++mb_x) {
+    DoFilter(dec, mb_x, dec->mb_y_);
+  }
+}
+
+//------------------------------------------------------------------------------
 
 void VP8StoreBlock(VP8Decoder* const dec) {
   if (dec->filter_type_ > 0) {
@@ -214,24 +236,31 @@ void VP8StoreBlock(VP8Decoder* const dec) {
   }
 }
 
+//------------------------------------------------------------------------------
+// This function is called after a row of macroblocks is finished decoding.
+// It also takes into account the following restrictions:
+//  * In case of in-loop filtering, we must hold off sending some of the bottom
+//    pixels as they are yet unfiltered. They will be when the next macroblock
+//    row is decoded. Meanwhile, we must preserve them by rotating them in the
+//    cache area. This doesn't hold for the very bottom row of the uncropped
+//    picture of course.
+//  * we must clip the remaining pixels against the cropping area. The VP8Io
+//    struct must have the following fields set correctly before calling put():
+
+#define MACROBLOCK_VPOS(mb_y)  ((mb_y) * 16)    // vertical position of a MB
+
 int VP8FinishRow(VP8Decoder* const dec, VP8Io* io) {
   const int extra_y_rows = kFilterExtraRows[dec->filter_type_];
   const int ysize = extra_y_rows * dec->cache_y_stride_;
   const int uvsize = (extra_y_rows / 2) * dec->cache_uv_stride_;
-  const int first_row = (dec->mb_y_ == 0);
-  const int last_row = (dec->mb_y_ >= dec->mb_h_ - 1);
   uint8_t* const ydst = dec->cache_y_ - ysize;
   uint8_t* const udst = dec->cache_u_ - uvsize;
   uint8_t* const vdst = dec->cache_v_ - uvsize;
-  if (dec->filter_type_ > 0) {
-    int mb_x;
-    for (mb_x = 0; mb_x < dec->mb_w_; ++mb_x) {
-      DoFilter(dec, mb_x, dec->mb_y_);
-    }
-  }
+  const int first_row = (dec->mb_y_ == 0);
+  const int last_row = (dec->mb_y_ >= dec->br_mb_y_ - 1);
+  int y_start = MACROBLOCK_VPOS(dec->mb_y_);
+  int y_end = MACROBLOCK_VPOS(dec->mb_y_ + 1);
   if (io->put) {
-    int y_start = dec->mb_y_ * 16;
-    int y_end = y_start + 16;
     if (!first_row) {
       y_start -= extra_y_rows;
       io->y = ydst;
@@ -242,19 +271,50 @@ int VP8FinishRow(VP8Decoder* const dec, VP8Io* io) {
       io->u = dec->cache_u_;
       io->v = dec->cache_v_;
     }
+
     if (!last_row) {
       y_end -= extra_y_rows;
     }
-    if (y_end > io->height) {
-      y_end = io->height;
+    if (y_end > io->crop_bottom) {
+      y_end = io->crop_bottom;    // make sure we don't overflow on last row.
     }
-    io->mb_y = y_start;
-    io->mb_h = y_end - y_start;
-    if (!io->put(io)) {
-      return 0;
+    io->a = NULL;
+#ifdef WEBP_EXPERIMENTAL_FEATURES
+    if (dec->alpha_data_) {
+      io->a = VP8DecompressAlphaRows(dec, y_start, y_end - y_start);
+      if (io->a == NULL) {
+        return VP8SetError(dec, VP8_STATUS_BITSTREAM_ERROR,
+                           "Could not decode alpha data.");
+      }
+    }
+#endif
+    if (y_start < io->crop_top) {
+      const int delta_y = io->crop_top - y_start;
+      y_start = io->crop_top;
+      assert(!(delta_y & 1));
+      io->y += dec->cache_y_stride_ * delta_y;
+      io->u += dec->cache_uv_stride_ * (delta_y >> 1);
+      io->v += dec->cache_uv_stride_ * (delta_y >> 1);
+      if (io->a) {
+        io->a += io->width * delta_y;
+      }
+    }
+    if (y_start < y_end) {
+      io->y += io->crop_left;
+      io->u += io->crop_left >> 1;
+      io->v += io->crop_left >> 1;
+      if (io->a) {
+        io->a += io->crop_left;
+      }
+      io->mb_y = y_start - io->crop_top;
+      io->mb_w = io->crop_right - io->crop_left;
+      io->mb_h = y_end - y_start;
+      if (!io->put(io)) {
+        return 0;
+      }
     }
   }
-    // rotate top samples
+  // rotate top samples
   if (!last_row) {
     memcpy(ydst, ydst + 16 * dec->cache_y_stride_, ysize);
     memcpy(udst, udst + 8 * dec->cache_uv_stride_, uvsize);
@@ -263,7 +323,60 @@ int VP8FinishRow(VP8Decoder* const dec, VP8Io* io) {
   return 1;
 }
 
-//-----------------------------------------------------------------------------
+#undef MACROBLOCK_VPOS
+
+//------------------------------------------------------------------------------
+// Finish setting up the decoding parameter once user's setup() is called.
+
+VP8StatusCode VP8FinishFrameSetup(VP8Decoder* const dec, VP8Io* const io) {
+  // Call setup() first. This may trigger additional decoding features on 'io'.
+  if (io->setup && !io->setup(io)) {
+    VP8SetError(dec, VP8_STATUS_USER_ABORT, "Frame setup failed");
+    return dec->status_;
+  }
+
+  // Disable filtering per user request
+  if (io->bypass_filtering) {
+    dec->filter_type_ = 0;
+  }
+  // TODO(skal): filter type / strength / sharpness forcing
+
+  // Define the area where we can skip in-loop filtering, in case of cropping.
+  //
+  // 'Simple' filter reads two luma samples outside of the macroblock and
+  // and filters one. It doesn't filter the chroma samples. Hence, we can
+  // avoid doing the in-loop filtering before crop_top/crop_left position.
+  // For the 'Complex' filter, 3 samples are read and up to 3 are filtered.
+  // Means: there's a dependency chain that goes all the way up to the
+  // top-left corner of the picture (MB #0). We must filter all the previous
+  // macroblocks.
+  // TODO(skal): add an 'approximate_decoding' option, that won't produce
+  // a 1:1 bit-exactness for complex filtering?
+  {
+    const int extra_pixels = kFilterExtraRows[dec->filter_type_];
+    if (dec->filter_type_ == 2) {
+      // For complex filter, we need to preserve the dependency chain.
+      dec->tl_mb_x_ = 0;
+      dec->tl_mb_y_ = 0;
+    } else {
+      // For simple filter, we can filter only the cropped region.
+      dec->tl_mb_y_ = io->crop_top >> 4;
+      dec->tl_mb_x_ = io->crop_left >> 4;
+    }
+    // We need some 'extra' pixels on the right/bottom.
+    dec->br_mb_y_ = (io->crop_bottom + 15 + extra_pixels) >> 4;
+    dec->br_mb_x_ = (io->crop_right + 15 + extra_pixels) >> 4;
+    if (dec->br_mb_x_ > dec->mb_w_) {
+      dec->br_mb_x_ = dec->mb_w_;
+    }
+    if (dec->br_mb_y_ > dec->mb_h_) {
+      dec->br_mb_y_ = dec->mb_h_;
+    }
+  }
+  return VP8_STATUS_OK;
+}
+
+//------------------------------------------------------------------------------
 // Main reconstruction function.
 
 static const int kScan[16] = {
@@ -358,7 +471,7 @@ void VP8ReconstructBlock(VP8Decoder* const dec) {
         uint8_t* const dst = y_dst + kScan[n];
         VP8PredLuma4[dec->imodes_[n]](dst);
         if (dec->non_zero_ac_ & (1 << n)) {
-          VP8Transform(coeffs + n * 16, dst);
+          VP8Transform(coeffs + n * 16, dst, 0);
         } else if (dec->non_zero_ & (1 << n)) {  // only DC is present
           VP8TransformDC(coeffs + n * 16, dst);
         }
@@ -370,7 +483,7 @@ void VP8ReconstructBlock(VP8Decoder* const dec) {
         for (n = 0; n < 16; n++) {
           uint8_t* const dst = y_dst + kScan[n];
           if (dec->non_zero_ac_ & (1 << n)) {
-            VP8Transform(coeffs + n * 16, dst);
+            VP8Transform(coeffs + n * 16, dst, 0);
           } else if (dec->non_zero_ & (1 << n)) {  // only DC is present
             VP8TransformDC(coeffs + n * 16, dst);
           }
@@ -410,7 +523,7 @@ void VP8ReconstructBlock(VP8Decoder* const dec) {
   }
 }
 
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 #if defined(__cplusplus) || defined(c_plusplus)
 }    // extern "C"
