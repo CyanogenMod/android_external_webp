@@ -14,6 +14,14 @@
 
 #include "webp/decode_vp8.h"
 
+/*
+ * Define ANDROID_WEBP_RGB to enable specific optimizations for Android
+ * RGBA_4444 & RGB_565 color support.
+ *
+ */
+
+#define ANDROID_WEBP_RGB
+
 #if defined(__cplusplus) || defined(c_plusplus)
 extern "C" {
 #endif
@@ -42,10 +50,17 @@ static inline void VP8YuvToRgb565(uint8_t y, uint8_t u, uint8_t v,
   const int r_off = VP8kVToR[v];
   const int g_off = (VP8kVToG[v] + VP8kUToG[u]) >> YUV_FIX;
   const int b_off = VP8kUToB[u];
+#ifdef ANDROID_WEBP_RGB
+  rgb[1] = ((VP8kClip[y + r_off - YUV_RANGE_MIN] & 0xf8) |
+            (VP8kClip[y + g_off - YUV_RANGE_MIN] >> 5));
+  rgb[0] = (((VP8kClip[y + g_off - YUV_RANGE_MIN] << 3) & 0xe0) |
+            (VP8kClip[y + b_off - YUV_RANGE_MIN] >> 3));
+#else
   rgb[0] = ((VP8kClip[y + r_off - YUV_RANGE_MIN] & 0xf8) |
             (VP8kClip[y + g_off - YUV_RANGE_MIN] >> 5));
   rgb[1] = (((VP8kClip[y + g_off - YUV_RANGE_MIN] << 3) & 0xe0) |
             (VP8kClip[y + b_off - YUV_RANGE_MIN] >> 3));
+#endif
 }
 
 static inline void VP8YuvToArgbKeepA(uint8_t y, uint8_t u, uint8_t v,
@@ -65,15 +80,24 @@ static inline void VP8YuvToRgba4444KeepA(uint8_t y, uint8_t u, uint8_t v,
   const int r_off = VP8kVToR[v];
   const int g_off = (VP8kVToG[v] + VP8kUToG[u]) >> YUV_FIX;
   const int b_off = VP8kUToB[u];
-  // Don't update Aplha (last 4 bits of argb[1])
+#ifdef ANDROID_WEBP_RGB
+  argb[1] = ((VP8kClip4Bits[y + r_off - YUV_RANGE_MIN] << 4) |
+             VP8kClip4Bits[y + g_off - YUV_RANGE_MIN]);
+  argb[0] = (argb[0] & 0x0f) | (VP8kClip4Bits[y + b_off - YUV_RANGE_MIN] << 4);
+#else
   argb[0] = ((VP8kClip4Bits[y + r_off - YUV_RANGE_MIN] << 4) |
              VP8kClip4Bits[y + g_off - YUV_RANGE_MIN]);
   argb[1] = (argb[1] & 0x0f) | (VP8kClip4Bits[y + b_off - YUV_RANGE_MIN] << 4);
+#endif
 }
 
 static inline void VP8YuvToRgba4444(uint8_t y, uint8_t u, uint8_t v,
                                     uint8_t* const argb) {
+#ifdef ANDROID_WEBP_RGB
+  argb[0] = 0x0f;
+#else
   argb[1] = 0x0f;
+#endif
   VP8YuvToRgba4444KeepA(y, u, v, argb);
 }
 
