@@ -16,27 +16,43 @@ LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES := \
-	alpha.c \
-	bits.c \
-	buffer.c \
-	dsp.c \
-	dsp_sse2.c \
-	frame.c \
-	idec.c \
-	io.c \
-	io_sse2.c \
-	layer.c \
-	quant.c \
-	tree.c \
-	vp8.c \
-	webp.c \
-	yuv.c
+        alpha.c \
+        buffer.c \
+        frame.c \
+        idec.c \
+        io.c \
+        layer.c \
+        quant.c \
+        tree.c \
+        vp8.c \
+        vp8l.c \
+        webp.c \
+        ../dsp/cpu.c \
+        ../dsp/dec.c \
+        ../dsp/dec_neon.c \
+        ../dsp/dec_sse2.c \
+        ../dsp/enc.c \
+        ../dsp/enc_sse2.c \
+        ../dsp/lossless.c \
+        ../dsp/upsampling.c \
+        ../dsp/upsampling_sse2.c \
+        ../dsp/yuv.c \
+        ../utils/bit_reader.c \
+        ../utils/bit_writer.c \
+        ../utils/color_cache.c \
+        ../utils/filters.c \
+        ../utils/huffman.c \
+        ../utils/huffman_encode.c \
+        ../utils/quant_levels.c \
+        ../utils/rescaler.c \
+        ../utils/thread.c \
+        ../utils/utils.c
 
 LOCAL_CFLAGS := -DANDROID
 
 LOCAL_C_INCLUDES += \
-	$(LOCAL_PATH) \
-	$(LOCAL_PATH)/../../include
+        $(LOCAL_PATH) \
+        $(LOCAL_PATH)/../../include
 
 LOCAL_MODULE:= libwebp-decode
 

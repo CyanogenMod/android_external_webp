@@ -1,35 +1,40 @@
-// Copyright 2011 Google Inc.
+// Copyright 2011 Google Inc. All Rights Reserved.
 //
 // This code is licensed under the same terms as WebM:
 //  Software License Agreement:  http://www.webmproject.org/license/software/
 //  Additional IP Rights Grant:  http://www.webmproject.org/license/additional/
 // -----------------------------------------------------------------------------
 //
-// SSE2 version of speed-critical functions.
+// SSE2 version of speed-critical encoding functions.
 //
 // Author: Christian Duvivier (cduvivier@google.com)
 
-#if defined(__SSE2__) || defined(_MSC_VER)
+#include "./dsp.h"
+
+#if defined(WEBP_USE_SSE2)
+#include <stdlib.h>  // for abs()
 #include <emmintrin.h>
 
-#include "vp8enci.h"
+#include "../enc/vp8enci.h"
 
 #if defined(__cplusplus) || defined(c_plusplus)
 extern "C" {
 #endif
 
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Compute susceptibility based on DCT-coeff histograms:
 // the higher, the "easier" the macroblock is to compress.
 
-static int CollectHistogramSSE2(const uint8_t* ref, const uint8_t* pred,
-                                int start_block, int end_block) {
-  int histo[MAX_COEFF_THRESH + 1] = { 0 };
-  int16_t out[16];
-  int j, k;
+static void CollectHistogramSSE2(const uint8_t* ref, const uint8_t* pred,
+                                 int start_block, int end_block,
+                                 VP8Histogram* const histo) {
   const __m128i max_coeff_thresh = _mm_set1_epi16(MAX_COEFF_THRESH);
+  int j;
   for (j = start_block; j < end_block; ++j) {
-    VP8FTransform(ref + VP8Scan[j], pred + VP8Scan[j], out);
+    int16_t out[16];
+    int k;
+
+    VP8FTransform(ref + VP8DspScan[j], pred + VP8DspScan[j], out);
 
     // Convert coefficients to bin (within out[]).
     {
@@ -44,9 +49,9 @@ static int CollectHistogramSSE2(const uint8_t* ref, const uint8_t* pred,
       const __m128i xor1 = _mm_xor_si128(out1, sign1);
       const __m128i abs0 = _mm_sub_epi16(xor0, sign0);
       const __m128i abs1 = _mm_sub_epi16(xor1, sign1);
-      // v = abs(out) >> 2
-      const __m128i v0 = _mm_srai_epi16(abs0, 2);
-      const __m128i v1 = _mm_srai_epi16(abs1, 2);
+      // v = abs(out) >> 3
+      const __m128i v0 = _mm_srai_epi16(abs0, 3);
+      const __m128i v1 = _mm_srai_epi16(abs1, 3);
       // bin = min(v, MAX_COEFF_THRESH)
       const __m128i bin0 = _mm_min_epi16(v0, max_coeff_thresh);
       const __m128i bin1 = _mm_min_epi16(v1, max_coeff_thresh);
@@ -55,16 +60,14 @@ static int CollectHistogramSSE2(const uint8_t* ref, const uint8_t* pred,
       _mm_storeu_si128((__m128i*)&out[8], bin1);
     }
 
-    // Use bin to update histogram.
+    // Convert coefficients to bin.
     for (k = 0; k < 16; ++k) {
-      histo[out[k]]++;
+      histo->distribution[out[k]]++;
     }
   }
-
-  return VP8GetAlpha(histo);
 }
 
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Transforms (Paragraph 14.4)
 
 // Does one or two inverse transforms.
@@ -436,7 +439,7 @@ static void FTransformSSE2(const uint8_t* src, const uint8_t* ref,
   }
 }
 
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Metric
 
 static int SSE4x4SSE2(const uint8_t* a, const uint8_t* b) {
@@ -485,7 +488,7 @@ static int SSE4x4SSE2(const uint8_t* a, const uint8_t* b) {
   return (tmp[3] + tmp[2] + tmp[1] + tmp[0]);
 }
 
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Texture distortion
 //
 // We try to match the spectral content (weighted) between source and
@@ -679,7 +682,7 @@ static int Disto16x16SSE2(const uint8_t* const a, const uint8_t* const b,
 }
 
 
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Quantization
 //
 
@@ -831,4 +834,4 @@ void VP8EncDspInitSSE2(void) {
 }    // extern "C"
 #endif
 
-#endif   //__SSE2__
+#endif   // WEBP_USE_SSE2

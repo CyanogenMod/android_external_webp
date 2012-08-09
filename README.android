@@ -23,6 +23,7 @@ Local modifications:
 - Fixed the Endian'ness bug for Color-Configs (RGB_565 & ARGB_4444).
   The fix is similar to jpeglib handling for JCS_RGB_565 & JCS_RGBA_8888
   color configs. Added the code under "ANDROID_WEBP_RGB" flag.
+- Sync-patch with libwebp ver 0.2.0-rc1 (head change#Ia5475247).
 
 The Android.mk file creates WebP Decoder and Encoder static libraries which
 can be added to any application by Adding to LOCAL_STATIC_LIBRARIES

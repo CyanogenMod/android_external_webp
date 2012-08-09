@@ -1,4 +1,4 @@
-// Copyright 2011 Google Inc.
+// Copyright 2011 Google Inc. All Rights Reserved.
 //
 // This code is licensed under the same terms as WebM:
 //  Software License Agreement:  http://www.webmproject.org/license/software/
@@ -9,36 +9,22 @@
 //
 // Author: somnath@google.com (Somnath Banerjee)
 
-#ifndef WEBP_DEC_WEBPI_H
-#define WEBP_DEC_WEBPI_H
+#ifndef WEBP_DEC_WEBPI_H_
+#define WEBP_DEC_WEBPI_H_
 
 #if defined(__cplusplus) || defined(c_plusplus)
 extern "C" {
 #endif
 
-#include "webp/decode_vp8.h"
+#include "../utils/rescaler.h"
+#include "./decode_vp8.h"
 
 //------------------------------------------------------------------------------
-// WebPDecParams: Decoding output parameters. Transcient internal object.
+// WebPDecParams: Decoding output parameters. Transient internal object.
 
 typedef struct WebPDecParams WebPDecParams;
 typedef int (*OutputFunc)(const VP8Io* const io, WebPDecParams* const p);
-
-// Structure use for on-the-fly rescaling
-typedef struct {
-  int x_expand;               // true if we're expanding in the x direction
-  int fy_scale, fx_scale;     // fixed-point scaling factor
-  int64_t fxy_scale;          // ''
-  // we need hpel-precise add/sub increments, for the downsampled U/V planes.
-  int y_accum;                // vertical accumulator
-  int y_add, y_sub;           // vertical increments (add ~= src, sub ~= dst)
-  int x_add, x_sub;           // horizontal increments (add ~= src, sub ~= dst)
-  int src_width, src_height;  // source dimensions
-  int dst_width, dst_height;  // destination dimensions
-  uint8_t* dst;
-  int dst_stride;
-  int32_t* irow, *frow;       // work buffer
-} WebPRescaler;
+typedef int (*OutputRowFunc)(WebPDecParams* const p, int y_pos);
 
 struct WebPDecParams {
   WebPDecBuffer* output;             // output buffer.
@@ -49,41 +35,50 @@ struct WebPDecParams {
   const WebPDecoderOptions* options;  // if not NULL, use alt decoding features
   // rescalers
   WebPRescaler scaler_y, scaler_u, scaler_v, scaler_a;
-  void* memory;               // overall scratch memory for the output work.
-  OutputFunc emit;            // output RGB or YUV samples
-  OutputFunc emit_alpha;      // output alpha channel
+  void* memory;                  // overall scratch memory for the output work.
+
+  OutputFunc emit;               // output RGB or YUV samples
+  OutputFunc emit_alpha;         // output alpha channel
+  OutputRowFunc emit_alpha_row;  // output one line of rescaled alpha values
 };
 
 // Should be called first, before any use of the WebPDecParams object.
 void WebPResetDecParams(WebPDecParams* const params);
 
 //------------------------------------------------------------------------------
-// Upsampler function to overwrite fancy upsampler.
+// Header parsing helpers
 
-typedef void (*WebPUpsampleLinePairFunc)(
-  const uint8_t* top_y, const uint8_t* bottom_y,
-  const uint8_t* top_u, const uint8_t* top_v,
-  const uint8_t* cur_u, const uint8_t* cur_v,
-  uint8_t* top_dst, uint8_t* bottom_dst, int len);
+// Structure storing a description of the RIFF headers.
+typedef struct {
+  const uint8_t* data;         // input buffer
+  size_t data_size;            // input buffer size
+  size_t offset;               // offset to main data chunk (VP8 or VP8L)
+  const uint8_t* alpha_data;   // points to alpha chunk (if present)
+  size_t alpha_data_size;      // alpha chunk size
+  size_t compressed_size;      // VP8/VP8L compressed data size
+  size_t riff_size;            // size of the riff payload (or 0 if absent)
+  int is_lossless;             // true if a VP8L chunk is present
+} WebPHeaderStructure;
 
-// Upsampler functions to be used to convert YUV to RGB(A) modes
-extern WebPUpsampleLinePairFunc WebPUpsamplers[MODE_LAST];
-extern WebPUpsampleLinePairFunc WebPUpsamplersKeepAlpha[MODE_LAST];
-
-// Initializes SSE2 version of the fancy upsamplers.
-void WebPInitUpsamplersSSE2(void);
+// Skips over all valid chunks prior to the first VP8/VP8L frame header.
+// Returns VP8_STATUS_OK on success,
+//         VP8_STATUS_BITSTREAM_ERROR if an invalid header/chunk is found, and
+//         VP8_STATUS_NOT_ENOUGH_DATA if case of insufficient data.
+// In 'headers', compressed_size, offset, alpha_data, alpha_size and lossless
+// fields are updated appropriately upon success.
+VP8StatusCode WebPParseHeaders(WebPHeaderStructure* const headers);
 
 //------------------------------------------------------------------------------
 // Misc utils
 
-// If a RIFF container is detected, validate it and skip over it. Returns
-// VP8 bit-stream size if RIFF header is valid else returns 0
-uint32_t WebPCheckRIFFHeader(const uint8_t** data_ptr,
-                             uint32_t* data_size_ptr);
-
 // Initializes VP8Io with custom setup, io and teardown functions. The default
 // hooks will use the supplied 'params' as io->opaque handle.
 void WebPInitCustomIo(WebPDecParams* const params, VP8Io* const io);
+
+// Setup crop_xxx fields, mb_w and mb_h in io. 'src_colorspace' refers
+// to the *compressed* format, not the output one.
+int WebPIoInitFromOptions(const WebPDecoderOptions* const options,
+                          VP8Io* const io, WEBP_CSP_MODE src_colorspace);
 
 //------------------------------------------------------------------------------
 // Internal functions regarding WebPDecBuffer memory (in buffer.c).
@@ -108,10 +103,12 @@ void WebPCopyDecBuffer(const WebPDecBuffer* const src,
 // Copy and transfer ownership from src to dst (beware of parameter order!)
 void WebPGrabDecBuffer(WebPDecBuffer* const src, WebPDecBuffer* const dst);
 
+
+
 //------------------------------------------------------------------------------
 
 #if defined(__cplusplus) || defined(c_plusplus)
 }    // extern "C"
 #endif
 
-#endif  // WEBP_DEC_WEBPI_H
+#endif  /* WEBP_DEC_WEBPI_H_ */
