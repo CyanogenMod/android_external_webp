@@ -29,6 +29,8 @@ extern "C" {
 #define ENC_MIN_VERSION 2
 #define ENC_REV_VERSION 0
 
+// size of histogram used by CollectHistogram.
+#define MAX_COEFF_THRESH   64
 
 // intra prediction modes
 enum { B_DC_PRED = 0,   // 4x4 modes
@@ -159,14 +161,6 @@ static WEBP_INLINE int QUANTDIV(int n, int iQ, int B) {
   return (n * iQ + B) >> QFIX;
 }
 extern const uint8_t VP8Zigzag[16];
-
-// size of histogram used by CollectHistogram.
-#define MAX_COEFF_THRESH   31
-typedef struct VP8Histogram VP8Histogram;
-struct VP8Histogram {
-  // TODO(skal): we only need to store the max_value and last_non_zero actually.
-  int distribution[MAX_COEFF_THRESH + 1];
-};
 
 //------------------------------------------------------------------------------
 // Headers

@@ -25,15 +25,13 @@ extern "C" {
 // Compute susceptibility based on DCT-coeff histograms:
 // the higher, the "easier" the macroblock is to compress.
 
-static void CollectHistogramSSE2(const uint8_t* ref, const uint8_t* pred,
-                                 int start_block, int end_block,
-                                 VP8Histogram* const histo) {
+static int CollectHistogramSSE2(const uint8_t* ref, const uint8_t* pred,
+                                int start_block, int end_block) {
+  int histo[MAX_COEFF_THRESH + 1] = { 0 };
+  int16_t out[16];
+  int j, k;
   const __m128i max_coeff_thresh = _mm_set1_epi16(MAX_COEFF_THRESH);
-  int j;
   for (j = start_block; j < end_block; ++j) {
-    int16_t out[16];
-    int k;
-
     VP8FTransform(ref + VP8DspScan[j], pred + VP8DspScan[j], out);
 
     // Convert coefficients to bin (within out[]).
@@ -49,9 +47,9 @@ static void CollectHistogramSSE2(const uint8_t* ref, const uint8_t* pred,
       const __m128i xor1 = _mm_xor_si128(out1, sign1);
       const __m128i abs0 = _mm_sub_epi16(xor0, sign0);
       const __m128i abs1 = _mm_sub_epi16(xor1, sign1);
-      // v = abs(out) >> 3
-      const __m128i v0 = _mm_srai_epi16(abs0, 3);
-      const __m128i v1 = _mm_srai_epi16(abs1, 3);
+      // v = abs(out) >> 2
+      const __m128i v0 = _mm_srai_epi16(abs0, 2);
+      const __m128i v1 = _mm_srai_epi16(abs1, 2);
       // bin = min(v, MAX_COEFF_THRESH)
       const __m128i bin0 = _mm_min_epi16(v0, max_coeff_thresh);
       const __m128i bin1 = _mm_min_epi16(v1, max_coeff_thresh);
@@ -60,11 +58,13 @@ static void CollectHistogramSSE2(const uint8_t* ref, const uint8_t* pred,
       _mm_storeu_si128((__m128i*)&out[8], bin1);
     }
 
-    // Convert coefficients to bin.
+    // Use bin to update histogram.
     for (k = 0; k < 16; ++k) {
-      histo->distribution[out[k]]++;
+      histo[out[k]]++;
     }
   }
+
+  return VP8GetAlpha(histo);
 }
 
 //------------------------------------------------------------------------------
