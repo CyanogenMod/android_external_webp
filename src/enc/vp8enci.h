@@ -1,4 +1,4 @@
-// Copyright 2011 Google Inc.
+// Copyright 2011 Google Inc. All Rights Reserved.
 //
 // This code is licensed under the same terms as WebM:
 //  Software License Agreement:  http://www.webmproject.org/license/software/
@@ -12,21 +12,22 @@
 #ifndef WEBP_ENC_VP8ENCI_H_
 #define WEBP_ENC_VP8ENCI_H_
 
-#include "string.h"     // for memcpy()
+#include <string.h>     // for memcpy()
+#include "../dsp/dsp.h"
+#include "../utils/bit_writer.h"
 #include "webp/encode.h"
-#include "bit_writer.h"
 
 #if defined(__cplusplus) || defined(c_plusplus)
 extern "C" {
 #endif
 
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Various defines and enums
 
 // version numbers
 #define ENC_MAJ_VERSION 0
-#define ENC_MIN_VERSION 1
-#define ENC_REV_VERSION 2
+#define ENC_MIN_VERSION 2
+#define ENC_REV_VERSION 0
 
 // size of histogram used by CollectHistogram.
 #define MAX_COEFF_THRESH   64
@@ -156,16 +157,17 @@ typedef int64_t score_t;     // type used for scores, rate, distortion
 #define BIAS(b)  ((b) << (QFIX - 8))
 // Fun fact: this is the _only_ line where we're actually being lossy and
 // discarding bits.
-static inline int QUANTDIV(int n, int iQ, int B) {
+static WEBP_INLINE int QUANTDIV(int n, int iQ, int B) {
   return (n * iQ + B) >> QFIX;
 }
 extern const uint8_t VP8Zigzag[16];
 
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Headers
 
+typedef uint32_t proba_t;   // 16b + 16b
 typedef uint8_t ProbaArray[NUM_CTX][NUM_PROBAS];
-typedef uint64_t StatsArray[NUM_CTX][NUM_PROBAS][2];
+typedef proba_t StatsArray[NUM_CTX][NUM_PROBAS];
 typedef uint16_t CostArray[NUM_CTX][MAX_VARIABLE_LEVEL + 1];
 typedef double LFStats[NUM_MB_SEGMENTS][MAX_LF_LEVELS];  // filter stats
 
@@ -184,8 +186,9 @@ typedef struct {
   uint8_t segments_[3];     // probabilities for segment tree
   uint8_t skip_proba_;      // final probability of being skipped.
   ProbaArray coeffs_[NUM_TYPES][NUM_BANDS];      // 924 bytes
-  StatsArray stats_[NUM_TYPES][NUM_BANDS];       // 7.4k
+  StatsArray stats_[NUM_TYPES][NUM_BANDS];       // 4224 bytes
   CostArray level_cost_[NUM_TYPES][NUM_BANDS];   // 11.4k
+  int dirty_;               // if true, need to call VP8CalculateLevelCosts()
   int use_skip_proba_;      // Note: we always use skip_proba for now.
   int nb_skip_;             // number of skipped blocks
 } VP8Proba;
@@ -199,19 +202,19 @@ typedef struct {
   int i4x4_lf_delta_;      // delta filter level for i4x4 relative to i16x16
 } VP8FilterHeader;
 
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Informations about the macroblocks.
 
 typedef struct {
   // block type
-  uint8_t type_:2;     // 0=i4x4, 1=i16x16
-  uint8_t uv_mode_:2;
-  uint8_t skip_:1;
-  uint8_t segment_:2;
+  unsigned int type_:2;     // 0=i4x4, 1=i16x16
+  unsigned int uv_mode_:2;
+  unsigned int skip_:1;
+  unsigned int segment_:2;
   uint8_t alpha_;      // quantization-susceptibility
 } VP8MBInfo;
 
-typedef struct {
+typedef struct VP8Matrix {
   uint16_t q_[16];        // quantizer steps
   uint16_t iq_[16];       // reciprocals, fixed point.
   uint16_t bias_[16];     // rounding bias
@@ -240,7 +243,7 @@ typedef struct {
   int16_t y_ac_levels[16][16];
   int16_t uv_levels[4 + 4][16];
   int mode_i16;               // mode number for intra16 prediction
-  int modes_i4[16];           // mode numbers for intra4 predictions
+  uint8_t modes_i4[16];       // mode numbers for intra4 predictions
   int mode_uv;                // mode number of chroma prediction
   uint32_t nz;                // non-zero blocks
 } VP8ModeScore;
@@ -271,6 +274,7 @@ typedef struct {
   LFStats*      lf_stats_;         // filter stats (borrowed from enc_)
   int           do_trellis_;       // if true, perform extra level optimisation
   int           done_;             // true when scan is finished
+  int           percent0_;         // saved initial progress percent
 } VP8EncIterator;
 
   // in iterator.c
@@ -287,6 +291,9 @@ void VP8IteratorExport(const VP8EncIterator* const it);
 // it->yuv_out_ or it->yuv_in_.
 int VP8IteratorNext(VP8EncIterator* const it,
                     const uint8_t* const block_to_save);
+// Report progression based on macroblock rows. Return 0 for user-abort request.
+int VP8IteratorProgress(const VP8EncIterator* const it,
+                        int final_delta_percent);
 // Intra4x4 iterations
 void VP8IteratorStartI4(VP8EncIterator* const it);
 // returns true if not done.
@@ -299,13 +306,54 @@ void VP8IteratorBytesToNz(VP8EncIterator* const it);
 
 // Helper functions to set mode properties
 void VP8SetIntra16Mode(const VP8EncIterator* const it, int mode);
-void VP8SetIntra4Mode(const VP8EncIterator* const it, int modes[16]);
+void VP8SetIntra4Mode(const VP8EncIterator* const it, const uint8_t* modes);
 void VP8SetIntraUVMode(const VP8EncIterator* const it, int mode);
 void VP8SetSkip(const VP8EncIterator* const it, int skip);
 void VP8SetSegment(const VP8EncIterator* const it, int segment);
-void VP8IteratorResetCosts(VP8EncIterator* const it);
 
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// Paginated token buffer
+
+// WIP: #define USE_TOKEN_BUFFER
+
+#ifdef USE_TOKEN_BUFFER
+
+#define MAX_NUM_TOKEN 2048
+
+typedef struct VP8Tokens VP8Tokens;
+struct VP8Tokens {
+  uint16_t tokens_[MAX_NUM_TOKEN];  // bit#15: bit, bits 0..14: slot
+  int left_;
+  VP8Tokens* next_;
+};
+
+typedef struct {
+  VP8Tokens* rows_;
+  uint16_t* tokens_;    // set to (*last_)->tokens_
+  VP8Tokens** last_;
+  int left_;
+  int error_;  // true in case of malloc error
+} VP8TBuffer;
+
+void VP8TBufferInit(VP8TBuffer* const b);    // initialize an empty buffer
+int VP8TBufferNewPage(VP8TBuffer* const b);  // allocate a new page
+void VP8TBufferClear(VP8TBuffer* const b);   // de-allocate memory
+
+int VP8EmitTokens(const VP8TBuffer* const b, VP8BitWriter* const bw,
+                  const uint8_t* const probas);
+
+static WEBP_INLINE int VP8AddToken(VP8TBuffer* const b,
+                                   int bit, int proba_idx) {
+  if (b->left_ > 0 || VP8TBufferNewPage(b)) {
+    const int slot = --b->left_;
+    b->tokens_[slot] = (bit << 15) | proba_idx;
+  }
+  return bit;
+}
+
+#endif  // USE_TOKEN_BUFFER
+
+//------------------------------------------------------------------------------
 // VP8Encoder
 
 struct VP8Encoder {
@@ -329,10 +377,12 @@ struct VP8Encoder {
   VP8BitWriter bw_;                         // part0
   VP8BitWriter parts_[MAX_NUM_PARTITIONS];  // token partitions
 
+  int percent_;                             // for progress
+
   // transparency blob
   int has_alpha_;
   uint8_t* alpha_data_;       // non-NULL if transparency is present
-  size_t alpha_data_size_;
+  uint32_t alpha_data_size_;
 
   // enhancement layer
   int use_layer_;
@@ -352,15 +402,16 @@ struct VP8Encoder {
 
   // probabilities and statistics
   VP8Proba proba_;
-  uint64_t sse_[3];        // sum of Y/U/V squared errors for all macroblocks
+  uint64_t sse_[4];        // sum of Y/U/V/A squared errors for all macroblocks
   uint64_t sse_count_;     // pixel count for the sse_[] stats
   int      coded_size_;
   int      residual_bytes_[3][4];
   int      block_count_[3];
 
   // quality/speed settings
-  int method_;             // 0=fastest, 6=best/slowest.
-  int rd_opt_level_;       // Deduced from method_.
+  int method_;              // 0=fastest, 6=best/slowest.
+  int rd_opt_level_;        // Deduced from method_.
+  int max_i4_header_bits_;  // partition #0 safeness factor
 
   // Memory
   VP8MBInfo* mb_info_;   // contextual macroblock infos (mb_w_ + 1)
@@ -380,7 +431,7 @@ struct VP8Encoder {
   LFStats   *lf_stats_;  // autofilter stats (if NULL, autofilter is off)
 };
 
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // internal functions. Not public.
 
   // in tree.c
@@ -399,6 +450,8 @@ void VP8CodeIntraModes(VP8Encoder* const enc);
 // and appending an assembly of all the pre-coded token partitions.
 // Return true if everything is ok.
 int VP8EncWrite(VP8Encoder* const enc);
+// Release memory allocated for bit-writing in VP8EncLoop & seq.
+void VP8EncFreeBitWriters(VP8Encoder* const enc);
 
   // in frame.c
 extern const uint8_t VP8EncBands[16 + 1];
@@ -419,13 +472,11 @@ int VP8StatLoop(VP8Encoder* const enc);
 
   // in webpenc.c
 // Assign an error code to a picture. Return false for convenience.
-int WebPEncodingSetError(WebPPicture* const pic, WebPEncodingError error);
+int WebPEncodingSetError(const WebPPicture* const pic, WebPEncodingError error);
+int WebPReportProgress(const WebPPicture* const pic,
+                       int percent, int* const percent_store);
+
   // in analysis.c
-// Compute susceptibility based on DCT-coeff histograms:
-// the higher, the "easier" the macroblock is to compress.
-typedef int (*VP8CHisto)(const uint8_t* ref, const uint8_t* pred,
-                         int start_block, int end_block);
-extern VP8CHisto VP8CollectHistogram;
 // Main analysis loop. Decides the segmentations and complexity.
 // Assigns a first guess for Intra16 and uvmode_ prediction modes.
 int VP8EncAnalyze(VP8Encoder* const enc);
@@ -437,10 +488,9 @@ void VP8SetSegmentParams(VP8Encoder* const enc, float quality);
 int VP8Decimate(VP8EncIterator* const it, VP8ModeScore* const rd, int rd_opt);
 
   // in alpha.c
-void VP8EncInitAlpha(VP8Encoder* enc);           // initialize alpha compression
-void VP8EncCodeAlphaBlock(VP8EncIterator* it);   // analyze or code a macroblock
-int VP8EncFinishAlpha(VP8Encoder* enc);          // finalize compressed data
-void VP8EncDeleteAlpha(VP8Encoder* enc);         // delete compressed data
+void VP8EncInitAlpha(VP8Encoder* const enc);    // initialize alpha compression
+int VP8EncFinishAlpha(VP8Encoder* const enc);   // finalize compressed data
+void VP8EncDeleteAlpha(VP8Encoder* const enc);  // delete compressed data
 
   // in layer.c
 void VP8EncInitLayer(VP8Encoder* const enc);     // init everything
@@ -448,63 +498,28 @@ void VP8EncCodeLayerBlock(VP8EncIterator* it);   // code one more macroblock
 int VP8EncFinishLayer(VP8Encoder* const enc);    // finalize coding
 void VP8EncDeleteLayer(VP8Encoder* enc);         // reclaim memory
 
-  // in dsp.c
-int VP8GetAlpha(const int histo[MAX_COEFF_THRESH + 1]);
-
-// Transforms
-// VP8Idct: Does one of two inverse transforms. If do_two is set, the transforms
-//          will be done for (ref, in, dst) and (ref + 4, in + 16, dst + 4).
-typedef void (*VP8Idct)(const uint8_t* ref, const int16_t* in, uint8_t* dst,
-                        int do_two);
-typedef void (*VP8Fdct)(const uint8_t* src, const uint8_t* ref, int16_t* out);
-typedef void (*VP8WHT)(const int16_t* in, int16_t* out);
-extern VP8Idct VP8ITransform;
-extern VP8Fdct VP8FTransform;
-extern VP8WHT VP8ITransformWHT;
-extern VP8WHT VP8FTransformWHT;
-// Predictions
-// *dst is the destination block. *top, *top_right and *left can be NULL.
-typedef void (*VP8IntraPreds)(uint8_t *dst, const uint8_t* left,
-                              const uint8_t* top);
-typedef void (*VP8Intra4Preds)(uint8_t *dst, const uint8_t* top);
-extern VP8Intra4Preds VP8EncPredLuma4;
-extern VP8IntraPreds VP8EncPredLuma16;
-extern VP8IntraPreds VP8EncPredChroma8;
-
-typedef int (*VP8Metric)(const uint8_t* pix, const uint8_t* ref);
-extern VP8Metric VP8SSE16x16, VP8SSE16x8, VP8SSE8x8, VP8SSE4x4;
-typedef int (*VP8WMetric)(const uint8_t* pix, const uint8_t* ref,
-                          const uint16_t* const weights);
-extern VP8WMetric VP8TDisto4x4, VP8TDisto16x16;
-
-typedef void (*VP8BlockCopy)(const uint8_t* src, uint8_t* dst);
-extern VP8BlockCopy VP8Copy4x4;
-extern VP8BlockCopy VP8Copy8x8;
-extern VP8BlockCopy VP8Copy16x16;
-// Quantization
-typedef int (*VP8QuantizeBlock)(int16_t in[16], int16_t out[16],
-                                int n, const VP8Matrix* const mtx);
-extern VP8QuantizeBlock VP8EncQuantizeBlock;
-
-typedef enum {
-  kSSE2,
-  kSSE3
-} CPUFeature;
-// returns true if the CPU supports the feature.
-typedef int (*VP8CPUInfo)(CPUFeature feature);
-extern VP8CPUInfo VP8EncGetCPUInfo;
-
-void VP8EncDspInit(void);   // must be called before using any of the above
-
   // in filter.c
-extern void VP8InitFilter(VP8EncIterator* const it);
-extern void VP8StoreFilterStats(VP8EncIterator* const it);
-extern void VP8AdjustFilterStrength(VP8EncIterator* const it);
 
-//-----------------------------------------------------------------------------
+// SSIM utils
+typedef struct {
+  double w, xm, ym, xxm, xym, yym;
+} DistoStats;
+void VP8SSIMAddStats(const DistoStats* const src, DistoStats* const dst);
+void VP8SSIMAccumulatePlane(const uint8_t* src1, int stride1,
+                            const uint8_t* src2, int stride2,
+                            int W, int H, DistoStats* const stats);
+double VP8SSIMGet(const DistoStats* const stats);
+double VP8SSIMGetSquaredError(const DistoStats* const stats);
+
+// autofilter
+void VP8InitFilter(VP8EncIterator* const it);
+void VP8StoreFilterStats(VP8EncIterator* const it);
+void VP8AdjustFilterStrength(VP8EncIterator* const it);
+
+//------------------------------------------------------------------------------
 
 #if defined(__cplusplus) || defined(c_plusplus)
 }    // extern "C"
 #endif
 
-#endif  // WEBP_ENC_VP8ENCI_H_
+#endif  /* WEBP_ENC_VP8ENCI_H_ */

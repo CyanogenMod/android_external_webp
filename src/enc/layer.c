@@ -1,4 +1,4 @@
-// Copyright 2011 Google Inc.
+// Copyright 2011 Google Inc. All Rights Reserved.
 //
 // This code is licensed under the same terms as WebM:
 //  Software License Agreement:  http://www.webmproject.org/license/software/
@@ -9,19 +9,15 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
-#include <assert.h>
 #include <stdlib.h>
-#include "vp8enci.h"
+
+#include "./vp8enci.h"
 
 #if defined(__cplusplus) || defined(c_plusplus)
 extern "C" {
 #endif
 
-#ifdef WEBP_EXPERIMENTAL_FEATURES
-
-#endif    /* WEBP_EXPERIMENTAL_FEATURES */
-
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 void VP8EncInitLayer(VP8Encoder* const enc) {
   enc->use_layer_ = (enc->pic_->u0 != NULL);
@@ -34,8 +30,6 @@ void VP8EncInitLayer(VP8Encoder* const enc) {
 
 void VP8EncCodeLayerBlock(VP8EncIterator* it) {
   (void)it;   // remove a warning
-#ifdef WEBP_EXPERIMENTAL_FEATURES
-#endif    /* WEBP_EXPERIMENTAL_FEATURES */
 }
 
 int VP8EncFinishLayer(VP8Encoder* const enc) {
