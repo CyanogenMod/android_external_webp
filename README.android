@@ -25,6 +25,7 @@ Local modifications:
   color configs. Added the code under "ANDROID_WEBP_RGB" flag.
 - Sync-patch with libwebp ver 0.2.0-rc1 (head change#Ia5475247).
 - Updated WebP with head change#I3da2063b
+- Updated WebP with head change#I6ecefe33
 
 The Android.mk file creates WebP Decoder and Encoder static libraries which
 can be added to any application by Adding to LOCAL_STATIC_LIBRARIES

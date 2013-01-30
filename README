@@ -4,7 +4,7 @@
           \__\__/\____/\_____/__/ ____  ___
                 / _/ /    \    \ /  _ \/ _/
                /  \_/   / /   \ \   __/  \__
-               \____/____/\_____/_____/____/v0.2.0
+               \____/____/\_____/_____/____/v0.2.1
 
 Description:
 ============
@@ -25,8 +25,8 @@ property rights grant can be found in the file PATENTS.
 Building:
 =========
 
-Windows build (without experimental features):
-----------------------------------------------
+Windows build:
+--------------
 
 By running:
 
@@ -37,49 +37,6 @@ cwebp.exe and dwebp.exe. The directory output\release-static\(x64|x86)\lib will
 contain the libwebp static library.
 The target architecture (x86/x64) is detected by Makefile.vc from the Visual
 Studio compiler (cl.exe) available in the system path.
-
-Windows build (with experimental features):
--------------------------------------------
-
-This release requires the zlib library. This library is not common under
-Windows nor can it be replaced with calls to the Windows API, so you will need
-to download it or build it yourself.
-
-You can either:
-(a) Link zlib dynamically (as a DLL).
-(b) Link zlib statically.
-
-Linking it dynamically is easier to do (as you can download a precompiled DLL),
-but a bit more cumbersome to use - you need to keep zlib1.dll in the same
-directory as the created EXEs.
-
-a. With dynamic zlib
-~~~~~~~~~~~~~~~~~~~~
-1. Download and unpack the archive from http://zlib.net/zlib125-dll.zip.
-2. Compile libwebp with the command:
-  nmake /f Makefile.vc CFG=release-static RTLIBCFG=static OBJDIR=output \
-      ZDLLDIR=C:\path\to\the\unpacked\archive EXPERIMENTAL=y
-3. Copy C:\path\to\the\unpacked\archive\zlib1.dll to
-   output\release-static\x86\bin for binaries there to work.
-Note: only a 32-bit DLL is currently available for download, so for a 64-bit
-build, you will need to build the DLL yourself.
-
-b. With static zlib
-~~~~~~~~~~~~~~~~~~~
-
-1. Download and unpack the source code from http://zlib.net/zlib125.zip.
-2. For a 32-bit build of zlib compatible with libwebp:
-  a. Edit zlib's win32\Makefile.msc, adding "-SAFESEH" to ASFLAGS.
-  b. Compile zlib with the command:
-    nmake /f win32/Makefile.msc LOC="-DASMV -DASMINF -MT" \
-        OBJA="inffas32.obj match686.obj"
-3. Compile libwebp with the command
-  nmake /f Makefile.vc CFG=release-static RTLIBCFG=static OBJDIR=output \
-      ZLIBDIR=C:\path\to\the\unpacked\archive experimental
-4. Use the binaries in output\release-static\x86\bin.
-Note: a 64-bit build of zlib requires different modifications of
-Makefile.msc.
-
 
 Unix build using makefile.unix:
 -------------------------------
@@ -214,6 +171,10 @@ options:
   -hint <string> ......... Specify image characteristics hint.
                            One of: photo, picture or graph
 
+  -metadata <string> ..... comma separated list of metadata to
+                           copy from the input to the output if present.
+                           Valid values: all, none (default), exif, iccp, xmp
+
   -short ................. condense printed message
   -quiet ................. don't print anything.
   -version ............... print version number and exit.
@@ -279,6 +240,8 @@ Use following options to convert into alternate image formats:
   -ppm ......... save the raw RGB samples as a color PPM
   -pgm ......... save the raw YUV samples as a grayscale PGM
                  file with IMC4 layout.
+  -yuv ......... save the raw YUV samples in flat layout.
+
  Other options are:
   -version  .... print version number and exit.
   -nofancy ..... don't use the fancy YUV420 upscaler.
