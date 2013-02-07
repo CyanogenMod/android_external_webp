@@ -13,9 +13,9 @@
 #define WEBP_ENC_VP8ENCI_H_
 
 #include <string.h>     // for memcpy()
-#include "webp/encode.h"
 #include "../dsp/dsp.h"
 #include "../utils/bit_writer.h"
+#include "webp/encode.h"
 
 #if defined(__cplusplus) || defined(c_plusplus)
 extern "C" {
@@ -27,7 +27,10 @@ extern "C" {
 // version numbers
 #define ENC_MAJ_VERSION 0
 #define ENC_MIN_VERSION 2
-#define ENC_REV_VERSION 1
+#define ENC_REV_VERSION 0
+
+// size of histogram used by CollectHistogram.
+#define MAX_COEFF_THRESH   64
 
 // intra prediction modes
 enum { B_DC_PRED = 0,   // 4x4 modes
@@ -158,14 +161,6 @@ static WEBP_INLINE int QUANTDIV(int n, int iQ, int B) {
   return (n * iQ + B) >> QFIX;
 }
 extern const uint8_t VP8Zigzag[16];
-
-// size of histogram used by CollectHistogram.
-#define MAX_COEFF_THRESH   31
-typedef struct VP8Histogram VP8Histogram;
-struct VP8Histogram {
-  // TODO(skal): we only need to store the max_value and last_non_zero actually.
-  int distribution[MAX_COEFF_THRESH + 1];
-};
 
 //------------------------------------------------------------------------------
 // Headers
@@ -321,27 +316,40 @@ void VP8SetSegment(const VP8EncIterator* const it, int segment);
 
 // WIP: #define USE_TOKEN_BUFFER
 
-typedef struct VP8Tokens VP8Tokens;  // struct details in token.c
+#ifdef USE_TOKEN_BUFFER
+
+#define MAX_NUM_TOKEN 2048
+
+typedef struct VP8Tokens VP8Tokens;
+struct VP8Tokens {
+  uint16_t tokens_[MAX_NUM_TOKEN];  // bit#15: bit, bits 0..14: slot
+  int left_;
+  VP8Tokens* next_;
+};
 
 typedef struct {
-  VP8Tokens* pages_;        // first page
-  VP8Tokens** last_page_;   // last page
-  uint16_t* tokens_;        // set to (*last_page_)->tokens_
-  int left_;          // how many free tokens left before the page is full.
-  int error_;         // true in case of malloc error
+  VP8Tokens* rows_;
+  uint16_t* tokens_;    // set to (*last_)->tokens_
+  VP8Tokens** last_;
+  int left_;
+  int error_;  // true in case of malloc error
 } VP8TBuffer;
 
 void VP8TBufferInit(VP8TBuffer* const b);    // initialize an empty buffer
-
-#ifdef USE_TOKEN_BUFFER
-
-void VP8TBufferClear(VP8TBuffer* const b);   // de-allocate pages memory
+int VP8TBufferNewPage(VP8TBuffer* const b);  // allocate a new page
+void VP8TBufferClear(VP8TBuffer* const b);   // de-allocate memory
 
 int VP8EmitTokens(const VP8TBuffer* const b, VP8BitWriter* const bw,
-                  const uint8_t* const probas, int final_pass);
-int VP8RecordCoeffTokens(int ctx, int first, int last,
-                         const int16_t* const coeffs, VP8TBuffer* tokens);
-void VP8TokenToStats(const VP8TBuffer* const b, proba_t* const stats);
+                  const uint8_t* const probas);
+
+static WEBP_INLINE int VP8AddToken(VP8TBuffer* const b,
+                                   int bit, int proba_idx) {
+  if (b->left_ > 0 || VP8TBufferNewPage(b)) {
+    const int slot = --b->left_;
+    b->tokens_[slot] = (bit << 15) | proba_idx;
+  }
+  return bit;
+}
 
 #endif  // USE_TOKEN_BUFFER
 
@@ -370,10 +378,6 @@ struct VP8Encoder {
   VP8BitWriter parts_[MAX_NUM_PARTITIONS];  // token partitions
 
   int percent_;                             // for progress
-
-#ifdef USE_TOKEN_BUFFER
-  VP8TBuffer tokens_;                       // token buffer
-#endif
 
   // transparency blob
   int has_alpha_;
@@ -451,11 +455,6 @@ void VP8EncFreeBitWriters(VP8Encoder* const enc);
 
   // in frame.c
 extern const uint8_t VP8EncBands[16 + 1];
-extern const uint8_t VP8Cat3[];
-extern const uint8_t VP8Cat4[];
-extern const uint8_t VP8Cat5[];
-extern const uint8_t VP8Cat6[];
-
 // Form all the four Intra16x16 predictions in the yuv_p_ cache
 void VP8MakeLuma16Preds(const VP8EncIterator* const it);
 // Form all the four Chroma8x8 predictions in the yuv_p_ cache

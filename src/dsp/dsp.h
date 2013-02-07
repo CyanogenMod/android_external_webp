@@ -29,9 +29,9 @@ extern "C" {
 #define WEBP_USE_SSE2
 #endif
 
-#if defined(__ANDROID__) && defined(__ARM_ARCH_7A__)
-#define WEBP_ANDROID_NEON  // Android targets that might support NEON
-#endif
+//#if defined(__ANDROID__) && defined(__ARM_ARCH_7A__)
+//#define WEBP_ANDROID_NEON  // Android targets that might support NEON
+//#endif
 
 #if defined(__ARM_NEON__) || defined(WEBP_ANDROID_NEON)
 #define WEBP_USE_NEON
@@ -48,6 +48,8 @@ extern VP8CPUInfo VP8GetCPUInfo;
 
 //------------------------------------------------------------------------------
 // Encoding
+
+int VP8GetAlpha(const int histo[]);
 
 // Transforms
 // VP8Idct: Does one of two inverse transforms. If do_two is set, the transforms
@@ -83,11 +85,10 @@ typedef int (*VP8QuantizeBlock)(int16_t in[16], int16_t out[16],
                                 int n, const struct VP8Matrix* const mtx);
 extern VP8QuantizeBlock VP8EncQuantizeBlock;
 
-// Collect histogram for susceptibility calculation and accumulate in histo[].
-struct VP8Histogram;
-typedef void (*VP8CHisto)(const uint8_t* ref, const uint8_t* pred,
-                          int start_block, int end_block,
-                          struct VP8Histogram* const histo);
+// Compute susceptibility based on DCT-coeff histograms:
+// the higher, the "easier" the macroblock is to compress.
+typedef int (*VP8CHisto)(const uint8_t* ref, const uint8_t* pred,
+                         int start_block, int end_block);
 extern const int VP8DspScan[16 + 4 + 4];
 extern VP8CHisto VP8CollectHistogram;
 
@@ -103,7 +104,7 @@ extern VP8DecIdct2 VP8Transform;
 extern VP8DecIdct VP8TransformUV;
 extern VP8DecIdct VP8TransformDC;
 extern VP8DecIdct VP8TransformDCUV;
-extern VP8WHT VP8TransformWHT;
+extern void (*VP8TransformWHT)(const int16_t* in, int16_t* out);
 
 // *dst is the destination block, with stride BPS. Boundary samples are
 // assumed accessible when needed.
@@ -158,9 +159,6 @@ extern WebPUpsampleLinePairFunc WebPUpsamplers[/* MODE_LAST */];
 // Initializes SSE2 version of the fancy upsamplers.
 void WebPInitUpsamplersSSE2(void);
 
-// NEON version
-void WebPInitUpsamplersNEON(void);
-
 #endif    // FANCY_UPSAMPLING
 
 // Point-sampling methods.
@@ -202,7 +200,6 @@ extern void (*WebPApplyAlphaMultiply4444)(
 void WebPInitPremultiply(void);
 
 void WebPInitPremultiplySSE2(void);   // should not be called directly.
-void WebPInitPremultiplyNEON(void);
 
 //------------------------------------------------------------------------------
 

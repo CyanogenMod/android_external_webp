@@ -40,8 +40,8 @@ extern "C" {
 //   20..23  VP8X flags bit-map corresponding to the chunk-types present.
 //   24..26  Width of the Canvas Image.
 //   27..29  Height of the Canvas Image.
-// There can be extra chunks after the "VP8X" chunk (ICCP, FRGM, ANMF, VP8,
-// VP8L, XMP, EXIF  ...)
+// There can be extra chunks after the "VP8X" chunk (ICCP, TILE, FRM, VP8,
+// META  ...)
 // All sizes are in little-endian order.
 // Note: chunk data size must be padded to multiple of 2 when written.
 
@@ -308,7 +308,7 @@ static VP8StatusCode ParseHeadersInternal(const uint8_t* data,
       // necessary to send VP8X chunk to the decoder.
       return VP8_STATUS_BITSTREAM_ERROR;
     }
-    if (has_alpha != NULL) *has_alpha = !!(flags & ALPHA_FLAG);
+    if (has_alpha != NULL) *has_alpha = !!(flags & ALPHA_FLAG_BIT);
     if (found_vp8x && headers == NULL) {
       return VP8_STATUS_OK;  // Return features from VP8X header.
     }

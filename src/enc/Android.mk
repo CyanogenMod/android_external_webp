@@ -33,12 +33,16 @@ LOCAL_SRC_FILES := \
         vp8l.c \
         webpenc.c \
         ../dsp/cpu.c \
-        ../dsp/cpu-features.c \
+        ../dsp/dec.c \
+        ../dsp/dec_neon.c \
+        ../dsp/dec_sse2.c \
         ../dsp/enc.c \
-        ../dsp/enc_neon.c \
         ../dsp/enc_sse2.c \
         ../dsp/lossless.c \
+        ../dsp/upsampling.c \
+        ../dsp/upsampling_sse2.c \
         ../dsp/yuv.c \
+        ../utils/bit_reader.c \
         ../utils/bit_writer.c \
         ../utils/color_cache.c \
         ../utils/filters.c \
@@ -49,7 +53,7 @@ LOCAL_SRC_FILES := \
         ../utils/thread.c \
         ../utils/utils.c
 
-LOCAL_CFLAGS := -DANDROID -DWEBP_SWAP_16BIT_CSP
+LOCAL_CFLAGS := -DANDROID
 
 LOCAL_C_INCLUDES += \
         $(LOCAL_PATH) \

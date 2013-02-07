@@ -11,6 +11,8 @@
 //          Jyrki Alakuijala (jyrki@google.com)
 //          Urvang Joshi (urvang@google.com)
 
+#define ANDROID_WEBP_RGB
+
 #if defined(__cplusplus) || defined(c_plusplus)
 extern "C" {
 #endif
@@ -21,6 +23,7 @@ extern "C" {
 #include "../dec/vp8li.h"
 #include "../dsp/yuv.h"
 #include "../dsp/dsp.h"
+#include "../enc/histogram.h"
 
 #define MAX_DIFF_COST (1e30f)
 
@@ -1033,14 +1036,12 @@ static void ConvertBGRAToRGBA4444(const uint32_t* src,
   const uint32_t* const src_end = src + num_pixels;
   while (src < src_end) {
     const uint32_t argb = *src++;
-    const uint8_t rg = ((argb >> 16) & 0xf0) | ((argb >> 12) & 0xf);
-    const uint8_t ba = ((argb >>  0) & 0xf0) | ((argb >> 28) & 0xf);
-#ifdef WEBP_SWAP_16BIT_CSP
-    *dst++ = ba;
-    *dst++ = rg;
+#ifdef ANDROID_WEBP_RGB
+    *dst++ = ((argb >>  0) & 0xf0) | ((argb >> 28) & 0xf);
+    *dst++ = ((argb >> 16) & 0xf0) | ((argb >> 12) & 0xf);
 #else
-    *dst++ = rg;
-    *dst++ = ba;
+    *dst++ = ((argb >> 16) & 0xf0) | ((argb >> 12) & 0xf);
+    *dst++ = ((argb >>  0) & 0xf0) | ((argb >> 28) & 0xf);
 #endif
   }
 }
@@ -1050,14 +1051,12 @@ static void ConvertBGRAToRGB565(const uint32_t* src,
   const uint32_t* const src_end = src + num_pixels;
   while (src < src_end) {
     const uint32_t argb = *src++;
-    const uint8_t rg = ((argb >> 16) & 0xf8) | ((argb >> 13) & 0x7);
-    const uint8_t gb = ((argb >>  5) & 0xe0) | ((argb >>  3) & 0x1f);
-#ifdef WEBP_SWAP_16BIT_CSP
-    *dst++ = gb;
-    *dst++ = rg;
+#ifdef ANDROID_WEBP_RGB
+    *dst++ = ((argb >>  5) & 0xe0) | ((argb >>  3) & 0x1f);
+    *dst++ = ((argb >> 16) & 0xf8) | ((argb >> 13) & 0x7);
 #else
-    *dst++ = rg;
-    *dst++ = gb;
+    *dst++ = ((argb >> 16) & 0xf8) | ((argb >> 13) & 0x7);
+    *dst++ = ((argb >>  5) & 0xe0) | ((argb >>  3) & 0x1f);
 #endif
   }
 }

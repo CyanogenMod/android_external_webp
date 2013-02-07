@@ -79,17 +79,18 @@ static int EncodeLossless(const uint8_t* const data, int width, int height,
   WebPConfigInit(&config);
   config.lossless = 1;
   config.method = effort_level;  // impact is very small
-  // Set a moderate default quality setting for alpha.
-  config.quality = 6.f * effort_level;
-  assert(config.quality >= 0 && config.quality <= 100.f);
+  // Set moderate default quality setting for alpha. Higher qualities (80 and
+  // above) could be very slow.
+  config.quality = 10.f + 15.f * effort_level;
+  if (config.quality > 100.f) config.quality = 100.f;
 
   ok = VP8LBitWriterInit(&tmp_bw, (width * height) >> 3);
   ok = ok && (VP8LEncodeStream(&config, &picture, &tmp_bw) == VP8_ENC_OK);
   WebPPictureFree(&picture);
   if (ok) {
-    const uint8_t* const buffer = VP8LBitWriterFinish(&tmp_bw);
-    const size_t buffer_size = VP8LBitWriterNumBytes(&tmp_bw);
-    VP8BitWriterAppend(bw, buffer, buffer_size);
+    const uint8_t* const data = VP8LBitWriterFinish(&tmp_bw);
+    const size_t data_size = VP8LBitWriterNumBytes(&tmp_bw);
+    VP8BitWriterAppend(bw, data, data_size);
   }
   VP8LBitWriterDestroy(&tmp_bw);
   return ok && !bw->error_;
