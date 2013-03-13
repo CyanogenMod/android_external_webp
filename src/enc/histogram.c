@@ -55,9 +55,9 @@ VP8LHistogramSet* VP8LAllocateHistogramSet(int size, int cache_bits) {
   int i;
   VP8LHistogramSet* set;
   VP8LHistogram* bulk;
-  const uint64_t total_size = (uint64_t)sizeof(*set)
-                            + size * sizeof(*set->histograms)
-                            + size * sizeof(**set->histograms);
+  const uint64_t total_size = sizeof(*set)
+                            + (uint64_t)size * sizeof(*set->histograms)
+                            + (uint64_t)size * sizeof(**set->histograms);
   uint8_t* memory = (uint8_t*)WebPSafeMalloc(total_size, sizeof(*memory));
   if (memory == NULL) return NULL;
 
@@ -249,14 +249,15 @@ static uint32_t MyRand(uint32_t *seed) {
 }
 
 static int HistogramCombine(const VP8LHistogramSet* const in,
-                            VP8LHistogramSet* const out, int num_pairs) {
+                            VP8LHistogramSet* const out, int iter_mult,
+                            int num_pairs, int num_tries_no_success) {
   int ok = 0;
   int i, iter;
   uint32_t seed = 0;
   int tries_with_no_success = 0;
-  const int min_cluster_size = 2;
   int out_size = in->size;
-  const int outer_iters = in->size * 3;
+  const int outer_iters = in->size * iter_mult;
+  const int min_cluster_size = 2;
   VP8LHistogram* const histos = (VP8LHistogram*)malloc(2 * sizeof(*histos));
   VP8LHistogram* cur_combo = histos + 0;    // trial merged histogram
   VP8LHistogram* best_combo = histos + 1;   // best merged histogram so far
@@ -271,12 +272,12 @@ static int HistogramCombine(const VP8LHistogramSet* const in,
 
   // Collapse similar histograms in 'out'.
   for (iter = 0; iter < outer_iters && out_size >= min_cluster_size; ++iter) {
-    // We pick the best pair to be combined out of 'inner_iters' pairs.
     double best_cost_diff = 0.;
     int best_idx1 = 0, best_idx2 = 1;
     int j;
+    const int num_tries = (num_pairs < out_size) ? num_pairs : out_size;
     seed += iter;
-    for (j = 0; j < num_pairs; ++j) {
+    for (j = 0; j < num_tries; ++j) {
       double curr_cost_diff;
       // Choose two histograms at random and try to combine them.
       const uint32_t idx1 = MyRand(&seed) % out_size;
@@ -315,7 +316,7 @@ static int HistogramCombine(const VP8LHistogramSet* const in,
       }
       tries_with_no_success = 0;
     }
-    if (++tries_with_no_success >= 50) {
+    if (++tries_with_no_success >= num_tries_no_success) {
       break;
     }
   }
@@ -384,8 +385,13 @@ int VP8LGetHistoImageSymbols(int xsize, int ysize,
   int ok = 0;
   const int histo_xsize = histo_bits ? VP8LSubSampleSize(xsize, histo_bits) : 1;
   const int histo_ysize = histo_bits ? VP8LSubSampleSize(ysize, histo_bits) : 1;
-  const int num_histo_pairs = 10 + quality / 2;  // For HistogramCombine().
   const int histo_image_raw_size = histo_xsize * histo_ysize;
+
+  // Heuristic params for HistogramCombine().
+  const int num_tries_no_success = 8 + (quality >> 1);
+  const int iter_mult = (quality < 27) ? 1 : 1 + ((quality - 27) >> 4);
+  const int num_pairs = (quality < 25) ? 10 : (5 * quality) >> 3;
+
   VP8LHistogramSet* const image_out =
       VP8LAllocateHistogramSet(histo_image_raw_size, cache_bits);
   if (image_out == NULL) return 0;
@@ -393,7 +399,8 @@ int VP8LGetHistoImageSymbols(int xsize, int ysize,
   // Build histogram image.
   HistogramBuildImage(xsize, histo_bits, refs, image_out);
   // Collapse similar histograms.
-  if (!HistogramCombine(image_out, image_in, num_histo_pairs)) {
+  if (!HistogramCombine(image_out, image_in, iter_mult, num_pairs,
+                        num_tries_no_success)) {
     goto Error;
   }
   // Find the optimal map from original histograms to the final ones.

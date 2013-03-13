@@ -40,8 +40,8 @@ extern "C" {
 //   20..23  VP8X flags bit-map corresponding to the chunk-types present.
 //   24..26  Width of the Canvas Image.
 //   27..29  Height of the Canvas Image.
-// There can be extra chunks after the "VP8X" chunk (ICCP, TILE, FRM, VP8,
-// META  ...)
+// There can be extra chunks after the "VP8X" chunk (ICCP, FRGM, ANMF, VP8,
+// VP8L, XMP, EXIF  ...)
 // All sizes are in little-endian order.
 // Note: chunk data size must be padded to multiple of 2 when written.
 
@@ -308,7 +308,7 @@ static VP8StatusCode ParseHeadersInternal(const uint8_t* data,
       // necessary to send VP8X chunk to the decoder.
       return VP8_STATUS_BITSTREAM_ERROR;
     }
-    if (has_alpha != NULL) *has_alpha = !!(flags & ALPHA_FLAG_BIT);
+    if (has_alpha != NULL) *has_alpha = !!(flags & ALPHA_FLAG);
     if (found_vp8x && headers == NULL) {
       return VP8_STATUS_OK;  // Return features from VP8X header.
     }
@@ -672,19 +672,13 @@ int WebPInitDecoderConfigInternal(WebPDecoderConfig* config,
 VP8StatusCode WebPGetFeaturesInternal(const uint8_t* data, size_t data_size,
                                       WebPBitstreamFeatures* features,
                                       int version) {
-  VP8StatusCode status;
   if (WEBP_ABI_IS_INCOMPATIBLE(version, WEBP_DECODER_ABI_VERSION)) {
     return VP8_STATUS_INVALID_PARAM;   // version mismatch
   }
   if (features == NULL) {
     return VP8_STATUS_INVALID_PARAM;
   }
-
-  status = GetFeatures(data, data_size, features);
-  if (status == VP8_STATUS_NOT_ENOUGH_DATA) {
-    return VP8_STATUS_BITSTREAM_ERROR;  // Not-enough-data treated as error.
-  }
-  return status;
+  return GetFeatures(data, data_size, features);
 }
 
 VP8StatusCode WebPDecode(const uint8_t* data, size_t data_size,

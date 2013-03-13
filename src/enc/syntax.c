@@ -11,8 +11,9 @@
 
 #include <assert.h>
 
-#include "./vp8enci.h"
+#include "../utils/utils.h"
 #include "webp/format_constants.h"
+#include "./vp8enci.h"
 
 #if defined(__cplusplus) || defined(c_plusplus)
 extern "C" {
@@ -20,18 +21,6 @@ extern "C" {
 
 //------------------------------------------------------------------------------
 // Helper functions
-
-// TODO(later): Move to webp/format_constants.h?
-static void PutLE24(uint8_t* const data, uint32_t val) {
-  data[0] = (val >>  0) & 0xff;
-  data[1] = (val >>  8) & 0xff;
-  data[2] = (val >> 16) & 0xff;
-}
-
-static void PutLE32(uint8_t* const data, uint32_t val) {
-  PutLE24(data, val);
-  data[3] = (val >> 24) & 0xff;
-}
 
 static int IsVP8XNeeded(const VP8Encoder* const enc) {
   return !!enc->has_alpha_;  // Currently the only case when VP8X is needed.
@@ -73,7 +62,7 @@ static WebPEncodingError PutVP8XHeader(const VP8Encoder* const enc) {
   assert(pic->width <= MAX_CANVAS_SIZE && pic->height <= MAX_CANVAS_SIZE);
 
   if (enc->has_alpha_) {
-    flags |= ALPHA_FLAG_BIT;
+    flags |= ALPHA_FLAG;
   }
 
   PutLE32(vp8x + TAG_SIZE,              VP8X_CHUNK_SIZE);
@@ -327,7 +316,9 @@ static size_t GeneratePartition0(VP8Encoder* const enc) {
 
   PutSegmentHeader(bw, enc);
   PutFilterHeader(bw, &enc->filter_hdr_);
-  VP8PutValue(bw, enc->config_->partitions, 2);
+  VP8PutValue(bw, enc->num_parts_ == 8 ? 3 :
+                  enc->num_parts_ == 4 ? 2 :
+                  enc->num_parts_ == 2 ? 1 : 0, 2);
   PutQuant(bw, enc);
   VP8PutBitUniform(bw, 0);   // no proba update
   VP8WriteProbas(bw, &enc->proba_);
