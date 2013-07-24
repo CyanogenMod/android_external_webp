@@ -23,7 +23,16 @@ Local modifications:
 - Fixed the Endian'ness bug for Color-Configs (RGB_565 & ARGB_4444).
   The fix is similar to jpeglib handling for JCS_RGB_565 & JCS_RGBA_8888
   color configs. Added the code under "ANDROID_WEBP_RGB" flag.
-- Sync-patch with libwebp ver 0.2.0 (head change#I3da2063b).
+- Sync-patch with libwebp ver 0.2.0-rc1 (head change#Ia5475247).
+- Updated WebP with head change#I3da2063b
+- Updated WebP with head change#I9e5ae737
+  - 16bit swapping of RGB565 / RGB4444 colorspace. Added compile-time flag
+    WEBP_SWAP_16BIT_CSP to support byte-swap (required for skia data type for
+    16bit values) output for these colorspaces.
+  - Added ARM/NEON code for decoder/encoder modules.
+  - Speedup in WebP compression (method 3 and above).
+  - Added multi-threaded alpha encoding for lossy compression.
+  - Updated WebP with head change#I9e5ae737
 
 The Android.mk file creates WebP Decoder and Encoder static libraries which
 can be added to any application by Adding to LOCAL_STATIC_LIBRARIES

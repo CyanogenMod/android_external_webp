@@ -28,27 +28,26 @@ LOCAL_SRC_FILES := \
         vp8l.c \
         webp.c \
         ../dsp/cpu.c \
+        ../dsp/cpu-features.c \
         ../dsp/dec.c \
         ../dsp/dec_neon.c \
         ../dsp/dec_sse2.c \
-        ../dsp/enc.c \
-        ../dsp/enc_sse2.c \
         ../dsp/lossless.c \
         ../dsp/upsampling.c \
+        ../dsp/upsampling_neon.c \
         ../dsp/upsampling_sse2.c \
         ../dsp/yuv.c \
+        ../demux/demux.c \
         ../utils/bit_reader.c \
-        ../utils/bit_writer.c \
         ../utils/color_cache.c \
         ../utils/filters.c \
         ../utils/huffman.c \
-        ../utils/huffman_encode.c \
-        ../utils/quant_levels.c \
+        ../utils/quant_levels_dec.c \
         ../utils/rescaler.c \
         ../utils/thread.c \
         ../utils/utils.c
 
-LOCAL_CFLAGS := -DANDROID
+LOCAL_CFLAGS := -DANDROID -DWEBP_SWAP_16BIT_CSP
 
 LOCAL_C_INCLUDES += \
         $(LOCAL_PATH) \

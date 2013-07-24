@@ -11,9 +11,9 @@
 
 #include "./dsp.h"
 
-//#if defined(__ANDROID__)
-//#include <cpu-features.h>
-//#endif
+#if defined(__ANDROID__)
+#include "./cpu-features.h"
+#endif
 
 #if defined(__cplusplus) || defined(c_plusplus)
 extern "C" {
@@ -59,14 +59,13 @@ static int x86CPUInfo(CPUFeature feature) {
 VP8CPUInfo VP8GetCPUInfo = x86CPUInfo;
 #elif defined(WEBP_ANDROID_NEON)
 static int AndroidCPUInfo(CPUFeature feature) {
-//  const AndroidCpuFamily cpu_family = android_getCpuFamily();
-//  const uint64_t cpu_features = android_getCpuFeatures();
-//  if (feature == kNEON) {
-//    return (cpu_family == ANDROID_CPU_FAMILY_ARM &&
-//            0 != (cpu_features & ANDROID_CPU_ARM_FEATURE_NEON));
-//  }
-//  return 0;
-  return 1;
+  const AndroidCpuFamily cpu_family = android_getCpuFamily();
+  const uint64_t cpu_features = android_getCpuFeatures();
+  if (feature == kNEON) {
+    return (cpu_family == ANDROID_CPU_FAMILY_ARM &&
+            0 != (cpu_features & ANDROID_CPU_ARM_FEATURE_NEON));
+  }
+  return 0;
 }
 VP8CPUInfo VP8GetCPUInfo = AndroidCPUInfo;
 #elif defined(__ARM_NEON__)

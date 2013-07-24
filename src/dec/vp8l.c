@@ -149,29 +149,20 @@ static WEBP_INLINE int PlaneCodeToDistance(int xsize, int plane_code) {
 //------------------------------------------------------------------------------
 // Decodes the next Huffman code from bit-stream.
 // FillBitWindow(br) needs to be called at minimum every second call
-// to ReadSymbolUnsafe.
-static int ReadSymbolUnsafe(const HuffmanTree* tree, VP8LBitReader* const br) {
-  const HuffmanTreeNode* node = tree->root_;
-  assert(node != NULL);
-  while (!HuffmanTreeNodeIsLeaf(node)) {
-    node = HuffmanTreeNextNode(node, VP8LReadOneBitUnsafe(br));
-  }
-  return node->symbol_;
-}
-
+// to ReadSymbol, in order to pre-fetch enough bits.
 static WEBP_INLINE int ReadSymbol(const HuffmanTree* tree,
                                   VP8LBitReader* const br) {
-  const int read_safe = (br->pos_ + 8 > br->len_);
-  if (!read_safe) {
-    return ReadSymbolUnsafe(tree, br);
-  } else {
-    const HuffmanTreeNode* node = tree->root_;
-    assert(node != NULL);
-    while (!HuffmanTreeNodeIsLeaf(node)) {
-      node = HuffmanTreeNextNode(node, VP8LReadOneBit(br));
-    }
-    return node->symbol_;
+  const HuffmanTreeNode* node = tree->root_;
+  int num_bits = 0;
+  uint32_t bits = VP8LPrefetchBits(br);
+  assert(node != NULL);
+  while (!HuffmanTreeNodeIsLeaf(node)) {
+    node = HuffmanTreeNextNode(node, bits & 1);
+    bits >>= 1;
+    ++num_bits;
   }
+  VP8LDiscardBits(br, num_bits);
+  return node->symbol_;
 }
 
 static int ReadHuffmanCodeLengths(
@@ -327,10 +318,10 @@ static int ReadHuffmanCodes(VP8LDecoder* const dec, int xsize, int ysize,
     hdr->huffman_subsample_bits_ = huffman_precision;
     for (i = 0; i < huffman_pixs; ++i) {
       // The huffman data is stored in red and green bytes.
-      const int index = (huffman_image[i] >> 8) & 0xffff;
-      huffman_image[i] = index;
-      if (index >= num_htree_groups) {
-        num_htree_groups = index + 1;
+      const int group = (huffman_image[i] >> 8) & 0xffff;
+      huffman_image[i] = group;
+      if (group >= num_htree_groups) {
+        num_htree_groups = group + 1;
       }
     }
   }

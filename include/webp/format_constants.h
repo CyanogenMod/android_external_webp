@@ -65,23 +65,29 @@ typedef enum {
 #define CHUNK_SIZE_BYTES   4     // Size needed to store chunk's size.
 #define CHUNK_HEADER_SIZE  8     // Size of a chunk header.
 #define RIFF_HEADER_SIZE   12    // Size of the RIFF header ("RIFFnnnnWEBP").
-#define FRAME_CHUNK_SIZE   15    // Size of a FRM chunk.
-#define LOOP_CHUNK_SIZE    2     // Size of a LOOP chunk.
-#define TILE_CHUNK_SIZE    6     // Size of a TILE chunk.
+#define ANMF_CHUNK_SIZE    16    // Size of an ANMF chunk.
+#define ANIM_CHUNK_SIZE    6     // Size of an ANIM chunk.
+#define FRGM_CHUNK_SIZE    6     // Size of a FRGM chunk.
 #define VP8X_CHUNK_SIZE    10    // Size of a VP8X chunk.
 
-#define TILING_FLAG_BIT    0x01  // Set if tiles are possibly used.
-#define ANIMATION_FLAG_BIT 0x02  // Set if some animation is expected
-#define ICC_FLAG_BIT       0x04  // Whether ICC is present or not.
-#define METADATA_FLAG_BIT  0x08  // Set if some META chunk is possibly present.
-#define ALPHA_FLAG_BIT     0x10  // Should be same as the ALPHA_FLAG in mux.h
-#define ROTATION_FLAG_BITS 0xe0  // all 3 bits for rotation + symmetry
+// VP8X Feature Flags.
+#if !(defined(__cplusplus) || defined(c_plusplus))
+typedef enum WebPFeatureFlags WebPFeatureFlags;
+#endif
+enum WebPFeatureFlags {
+  FRAGMENTS_FLAG  = 0x00000001,
+  ANIMATION_FLAG  = 0x00000002,
+  XMP_FLAG        = 0x00000004,
+  EXIF_FLAG       = 0x00000008,
+  ALPHA_FLAG      = 0x00000010,
+  ICCP_FLAG       = 0x00000020
+};
 
 #define MAX_CANVAS_SIZE     (1 << 24)    // 24-bit max for VP8X width/height.
 #define MAX_IMAGE_AREA      (1ULL << 32) // 32-bit max for width x height.
 #define MAX_LOOP_COUNT      (1 << 16)    // maximum value for loop-count
 #define MAX_DURATION        (1 << 24)    // maximum duration
-#define MAX_POSITION_OFFSET (1 << 24)    // maximum frame/tile x/y offset
+#define MAX_POSITION_OFFSET (1 << 24)    // maximum frame/fragment x/y offset
 
 // Maximum chunk payload is such that adding the header and padding won't
 // overflow a uint32_t.
