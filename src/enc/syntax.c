@@ -1,8 +1,10 @@
 // Copyright 2011 Google Inc. All Rights Reserved.
 //
-// This code is licensed under the same terms as WebM:
-//  Software License Agreement:  http://www.webmproject.org/license/software/
-//  Additional IP Rights Grant:  http://www.webmproject.org/license/additional/
+// Use of this source code is governed by a BSD-style license
+// that can be found in the COPYING file in the root of the source
+// tree. An additional intellectual property rights grant can be found
+// in the file PATENTS. All contributing project authors may
+// be found in the AUTHORS file in the root of the source tree.
 // -----------------------------------------------------------------------------
 //
 // Header syntax writing
@@ -12,7 +14,8 @@
 #include <assert.h>
 
 #include "../utils/utils.h"
-#include "webp/format_constants.h"
+#include "webp/format_constants.h"  // RIFF constants
+#include "webp/mux_types.h"         // ALPHA_FLAG
 #include "./vp8enci.h"
 
 #if defined(__cplusplus) || defined(c_plusplus)
@@ -28,7 +31,6 @@ static int IsVP8XNeeded(const VP8Encoder* const enc) {
 }
 
 static int PutPaddingByte(const WebPPicture* const pic) {
-
   const uint8_t pad_byte[1] = { 0 };
   return !!pic->writer(pad_byte, 1, pic);
 }
@@ -69,7 +71,7 @@ static WebPEncodingError PutVP8XHeader(const VP8Encoder* const enc) {
   PutLE32(vp8x + CHUNK_HEADER_SIZE,     flags);
   PutLE24(vp8x + CHUNK_HEADER_SIZE + 4, pic->width - 1);
   PutLE24(vp8x + CHUNK_HEADER_SIZE + 7, pic->height - 1);
-  if(!pic->writer(vp8x, sizeof(vp8x), pic)) {
+  if (!pic->writer(vp8x, sizeof(vp8x), pic)) {
     return VP8_ENC_ERROR_BAD_WRITE;
   }
   return VP8_ENC_OK;

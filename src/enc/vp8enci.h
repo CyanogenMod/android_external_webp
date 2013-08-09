@@ -1,8 +1,10 @@
 // Copyright 2011 Google Inc. All Rights Reserved.
 //
-// This code is licensed under the same terms as WebM:
-//  Software License Agreement:  http://www.webmproject.org/license/software/
-//  Additional IP Rights Grant:  http://www.webmproject.org/license/additional/
+// Use of this source code is governed by a BSD-style license
+// that can be found in the COPYING file in the root of the source
+// tree. An additional intellectual property rights grant can be found
+// in the file PATENTS. All contributing project authors may
+// be found in the AUTHORS file in the root of the source tree.
 // -----------------------------------------------------------------------------
 //
 //   WebP encoder: internal header.
@@ -27,7 +29,7 @@ extern "C" {
 
 // version numbers
 #define ENC_MAJ_VERSION 0
-#define ENC_MIN_VERSION 2
+#define ENC_MIN_VERSION 3
 #define ENC_REV_VERSION 1
 
 // intra prediction modes
@@ -55,8 +57,9 @@ enum { NUM_MB_SEGMENTS = 4,
        NUM_BANDS = 8,
        NUM_CTX = 3,
        NUM_PROBAS = 11,
-       MAX_LF_LEVELS = 64,      // Maximum loop filter level
-       MAX_VARIABLE_LEVEL = 67  // last (inclusive) level with variable cost
+       MAX_LF_LEVELS = 64,       // Maximum loop filter level
+       MAX_VARIABLE_LEVEL = 67,  // last (inclusive) level with variable cost
+       MAX_LEVEL = 2047          // max level (note: max codable is 2047 + 67)
      };
 
 typedef enum {   // Rate-distortion optimization levels

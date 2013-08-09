@@ -1,8 +1,10 @@
 // Copyright 2011 Google Inc. All Rights Reserved.
 //
-// This code is licensed under the same terms as WebM:
-//  Software License Agreement:  http://www.webmproject.org/license/software/
-//  Additional IP Rights Grant:  http://www.webmproject.org/license/additional/
+// Use of this source code is governed by a BSD-style license
+// that can be found in the COPYING file in the root of the source
+// tree. An additional intellectual property rights grant can be found
+// in the file PATENTS. All contributing project authors may
+// be found in the AUTHORS file in the root of the source tree.
 // -----------------------------------------------------------------------------
 //
 // WebP encoder: main entry point
@@ -374,11 +376,8 @@ int WebPEncode(const WebPConfig* config, WebPPicture* pic) {
   if (!config->lossless) {
     VP8Encoder* enc = NULL;
     if (pic->y == NULL || pic->u == NULL || pic->v == NULL) {
-      if (pic->argb != NULL) {
-        if (!WebPPictureARGBToYUVA(pic, WEBP_YUV420)) return 0;
-      } else {
-        return WebPEncodingSetError(pic, VP8_ENC_ERROR_NULL_PARAMETER);
-      }
+      // Make sure we have YUVA samples.
+      if (!WebPPictureARGBToYUVA(pic, WEBP_YUV420)) return 0;
     }
 
     enc = InitVP8Encoder(config, pic);
@@ -389,9 +388,9 @@ int WebPEncode(const WebPConfig* config, WebPPicture* pic) {
     // Analysis is done, proceed to actual coding.
     ok = ok && VP8EncStartAlpha(enc);   // possibly done in parallel
     if (!enc->use_tokens_) {
-      ok = VP8EncLoop(enc);
+      ok = ok && VP8EncLoop(enc);
     } else {
-      ok = VP8EncTokenLoop(enc);
+      ok = ok && VP8EncTokenLoop(enc);
     }
     ok = ok && VP8EncFinishAlpha(enc);
 #ifdef WEBP_EXPERIMENTAL_FEATURES
@@ -405,8 +404,10 @@ int WebPEncode(const WebPConfig* config, WebPPicture* pic) {
     }
     ok &= DeleteVP8Encoder(enc);  // must always be called, even if !ok
   } else {
-    if (pic->argb == NULL)
-      return WebPEncodingSetError(pic, VP8_ENC_ERROR_NULL_PARAMETER);
+    // Make sure we have ARGB samples.
+    if (pic->argb == NULL && !WebPPictureYUVAToARGB(pic)) {
+      return 0;
+    }
 
     ok = VP8LEncodeImage(config, pic);  // Sets pic->error in case of problem.
   }

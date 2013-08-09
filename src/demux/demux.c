@@ -1,12 +1,18 @@
 // Copyright 2012 Google Inc. All Rights Reserved.
 //
-// This code is licensed under the same terms as WebM:
-//  Software License Agreement:  http://www.webmproject.org/license/software/
-//  Additional IP Rights Grant:  http://www.webmproject.org/license/additional/
+// Use of this source code is governed by a BSD-style license
+// that can be found in the COPYING file in the root of the source
+// tree. An additional intellectual property rights grant can be found
+// in the file PATENTS. All contributing project authors may
+// be found in the AUTHORS file in the root of the source tree.
 // -----------------------------------------------------------------------------
 //
 //  WebP container demux.
 //
+
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
 
 #include <assert.h>
 #include <stdlib.h>
@@ -23,7 +29,7 @@ extern "C" {
 
 #define DMUX_MAJ_VERSION 0
 #define DMUX_MIN_VERSION 1
-#define DMUX_REV_VERSION 0
+#define DMUX_REV_VERSION 1
 
 typedef struct {
   size_t start_;        // start location of the data
@@ -65,6 +71,7 @@ struct WebPDemuxer {
   uint32_t bgcolor_;
   int num_frames_;
   Frame* frames_;
+  Frame** frames_tail_;
   Chunk* chunks_;  // non-image chunks
 };
 
@@ -179,15 +186,12 @@ static void AddChunk(WebPDemuxer* const dmux, Chunk* const chunk) {
 // Add a frame to the end of the list, ensuring the last frame is complete.
 // Returns true on success, false otherwise.
 static int AddFrame(WebPDemuxer* const dmux, Frame* const frame) {
-  const Frame* last_frame = NULL;
-  Frame** f = &dmux->frames_;
-  while (*f != NULL) {
-    last_frame = *f;
-    f = &(*f)->next_;
-  }
+  const Frame* const last_frame = *dmux->frames_tail_;
   if (last_frame != NULL && !last_frame->complete_) return 0;
-  *f = frame;
+
+  *dmux->frames_tail_ = frame;
   frame->next_ = NULL;
+  dmux->frames_tail_ = &frame->next_;
   return 1;
 }
 
@@ -231,8 +235,10 @@ static ParseStatus StoreFrame(int frame_num, uint32_t min_size,
           goto Done;
         }
         break;
-      case MKFOURCC('V', 'P', '8', ' '):
       case MKFOURCC('V', 'P', '8', 'L'):
+        if (alpha_chunks > 0) return PARSE_ERROR;  // VP8L has its own alpha
+        // fall through
+      case MKFOURCC('V', 'P', '8', ' '):
         if (image_chunks == 0) {
           // Extract the bitstream features, tolerating failures when the data
           // is incomplete.
@@ -295,7 +301,7 @@ static ParseStatus NewFrame(const MemBuffer* const mem,
 
 // Parse a 'ANMF' chunk and any image bearing chunks that immediately follow.
 // 'frame_chunk_size' is the previously validated, padded chunk size.
-static ParseStatus ParseFrame(
+static ParseStatus ParseAnimationFrame(
     WebPDemuxer* const dmux, uint32_t frame_chunk_size) {
   const int has_frames = !!(dmux->feature_flags_ & ANIMATION_FLAG);
   const uint32_t anmf_payload_size = frame_chunk_size - ANMF_CHUNK_SIZE;
@@ -313,11 +319,12 @@ static ParseStatus ParseFrame(
   frame->duration_       = ReadLE24s(mem);
   frame->dispose_method_ = (WebPMuxAnimDispose)(ReadByte(mem) & 1);
   if (frame->width_ * (uint64_t)frame->height_ >= MAX_IMAGE_AREA) {
+    free(frame);
     return PARSE_ERROR;
   }
 
-  // Store a frame only if the animation flag is set and all data for this frame
-  // is available.
+  // Store a frame only if the animation flag is set there is some data for
+  // this frame is available.
   status = StoreFrame(dmux->num_frames_ + 1, anmf_payload_size, mem, frame,
                       NULL);
   if (status != PARSE_ERROR && has_frames && frame->frame_num_ > 0) {
@@ -333,6 +340,7 @@ static ParseStatus ParseFrame(
   return status;
 }
 
+#ifdef WEBP_EXPERIMENTAL_FEATURES
 // Parse a 'FRGM' chunk and any image bearing chunks that immediately follow.
 // 'fragment_chunk_size' is the previously validated, padded chunk size.
 static ParseStatus ParseFragment(WebPDemuxer* const dmux,
@@ -347,12 +355,12 @@ static ParseStatus ParseFragment(WebPDemuxer* const dmux,
       NewFrame(mem, FRGM_CHUNK_SIZE, fragment_chunk_size, &frame);
   if (status != PARSE_OK) return status;
 
-  frame->is_fragment_  = 1;
+  frame->is_fragment_ = 1;
   frame->x_offset_ = 2 * ReadLE24s(mem);
   frame->y_offset_ = 2 * ReadLE24s(mem);
 
-  // Store a fragment only if the fragments flag is set and all data for this
-  // fragment is available.
+  // Store a fragment only if the fragments flag is set there is some data for
+  // this fragment is available.
   status = StoreFrame(frame_num, frgm_payload_size, mem, frame, NULL);
   if (status != PARSE_ERROR && has_fragments && frame->frame_num_ > 0) {
     added_fragment = AddFrame(dmux, frame);
@@ -366,8 +374,9 @@ static ParseStatus ParseFragment(WebPDemuxer* const dmux,
   if (!added_fragment) free(frame);
   return status;
 }
+#endif  // WEBP_EXPERIMENTAL_FEATURES
 
-// General chunk storage starting with the header at 'start_offset' allowing
+// General chunk storage, starting with the header at 'start_offset', allowing
 // the user to request the payload via a fourcc string. 'size' includes the
 // header and the unpadded payload size.
 // Returns true on success, false otherwise.
@@ -424,7 +433,7 @@ static ParseStatus ParseSingleImage(WebPDemuxer* const dmux) {
   frame = (Frame*)calloc(1, sizeof(*frame));
   if (frame == NULL) return PARSE_ERROR;
 
-  // For the single image case, we allow parsing of a partial frame. But we need
+  // For the single image case we allow parsing of a partial frame, but we need
   // at least CHUNK_HEADER_SIZE for parsing.
   status = StoreFrame(1, CHUNK_HEADER_SIZE, &dmux->mem_, frame,
                       &has_vp8l_alpha);
@@ -500,6 +509,9 @@ static ParseStatus ParseVP8X(WebPDemuxer* const dmux) {
       case MKFOURCC('A', 'L', 'P', 'H'):
       case MKFOURCC('V', 'P', '8', ' '):
       case MKFOURCC('V', 'P', '8', 'L'): {
+        // check that this isn't an animation (all frames should be in an ANMF).
+        if (anim_chunks > 0) return PARSE_ERROR;
+
         Rewind(mem, CHUNK_HEADER_SIZE);
         status = ParseSingleImage(dmux);
         break;
@@ -521,13 +533,16 @@ static ParseStatus ParseVP8X(WebPDemuxer* const dmux) {
         break;
       }
       case MKFOURCC('A', 'N', 'M', 'F'): {
-        status = ParseFrame(dmux, chunk_size_padded);
+        if (anim_chunks == 0) return PARSE_ERROR;  // 'ANIM' precedes frames.
+        status = ParseAnimationFrame(dmux, chunk_size_padded);
         break;
       }
+#ifdef WEBP_EXPERIMENTAL_FEATURES
       case MKFOURCC('F', 'R', 'G', 'M'): {
         status = ParseFragment(dmux, chunk_size_padded);
         break;
       }
+#endif
       case MKFOURCC('I', 'C', 'C', 'P'): {
         store_chunk = !!(dmux->feature_flags_ & ICCP_FLAG);
         goto Skip;
@@ -615,6 +630,9 @@ static int IsValidExtendedFormat(const WebPDemuxer* const dmux) {
 
         if (f->width_ <= 0 || f->height_ <= 0) return 0;
       } else {
+        // There shouldn't be a partial frame in a complete file.
+        if (dmux->state_ == WEBP_DEMUX_DONE) return 0;
+
         // Ensure alpha precedes image bitstream.
         if (alpha->size_ > 0 && image->size_ > 0 &&
             alpha->offset_ > image->offset_) {
@@ -643,6 +661,7 @@ static void InitDemux(WebPDemuxer* const dmux, const MemBuffer* const mem) {
   dmux->bgcolor_ = 0xFFFFFFFF;  // White background by default.
   dmux->canvas_width_ = -1;
   dmux->canvas_height_ = -1;
+  dmux->frames_tail_ = &dmux->frames_;
   dmux->mem_ = *mem;
 }
 
