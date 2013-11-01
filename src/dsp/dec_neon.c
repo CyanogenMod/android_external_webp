@@ -1,8 +1,10 @@
 // Copyright 2012 Google Inc. All Rights Reserved.
 //
-// This code is licensed under the same terms as WebM:
-//  Software License Agreement:  http://www.webmproject.org/license/software/
-//  Additional IP Rights Grant:  http://www.webmproject.org/license/additional/
+// Use of this source code is governed by a BSD-style license
+// that can be found in the COPYING file in the root of the source
+// tree. An additional intellectual property rights grant can be found
+// in the file PATENTS. All contributing project authors may
+// be found in the AUTHORS file in the root of the source tree.
 // -----------------------------------------------------------------------------
 //
 // ARM NEON version of dsp functions and loop filtering.
@@ -79,7 +81,7 @@ extern "C" {
   "vld4.8   {" #c1"[6], " #c2"[6], " #c3"[6], " #c4"[6]}," #b1 "," #stride"\n" \
   "vld4.8   {" #c1"[7], " #c2"[7], " #c3"[7], " #c4"[7]}," #b2 "," #stride"\n"
 
-#define STORE8x2(c1, c2, p,stride)                                             \
+#define STORE8x2(c1, c2, p, stride)                                            \
   "vst2.8   {" #c1"[0], " #c2"[0]}," #p "," #stride " \n"                      \
   "vst2.8   {" #c1"[1], " #c2"[1]}," #p "," #stride " \n"                      \
   "vst2.8   {" #c1"[2], " #c2"[2]}," #p "," #stride " \n"                      \
@@ -315,8 +317,8 @@ static void TransformTwoNEON(const int16_t* in, uint8_t* dst, int do_two) {
 }
 
 static void TransformWHT(const int16_t* in, int16_t* out) {
-  const int kStep = 32; // The store is only incrementing the pointer as if we
-                        // had stored a single byte.
+  const int kStep = 32;  // The store is only incrementing the pointer as if we
+                         // had stored a single byte.
   __asm__ volatile (
     // part 1
     // load data into q0, q1

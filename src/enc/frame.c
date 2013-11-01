@@ -1,8 +1,10 @@
 // Copyright 2011 Google Inc. All Rights Reserved.
 //
-// This code is licensed under the same terms as WebM:
-//  Software License Agreement:  http://www.webmproject.org/license/software/
-//  Additional IP Rights Grant:  http://www.webmproject.org/license/additional/
+// Use of this source code is governed by a BSD-style license
+// that can be found in the COPYING file in the root of the source
+// tree. An additional intellectual property rights grant can be found
+// in the file PATENTS. All contributing project authors may
+// be found in the AUTHORS file in the root of the source tree.
 // -----------------------------------------------------------------------------
 //
 //   frame coding and analysis
@@ -901,14 +903,20 @@ int VP8EncLoop(VP8Encoder* const enc) {
 // Single pass using Token Buffer.
 
 #if !defined(DISABLE_TOKEN_BUFFER)
+
+#define MIN_COUNT 96   // minimum number of macroblocks before updating stats
+
 int VP8EncTokenLoop(VP8Encoder* const enc) {
   int ok;
-  // refresh the proba 8 times per pass
-  const int max_count = (enc->mb_w_ * enc->mb_h_) >> 3;
-  int cnt = max_count;
+  // Roughly refresh the proba height times per pass
+  int max_count = (enc->mb_w_ * enc->mb_h_) >> 3;
+  int cnt;
   VP8EncIterator it;
   VP8Proba* const proba = &enc->proba_;
   const VP8RDLevel rd_opt = enc->rd_opt_level_;
+
+  if (max_count < MIN_COUNT) max_count = MIN_COUNT;
+  cnt = max_count;
 
   assert(enc->num_parts_ == 1);
   assert(enc->use_tokens_);

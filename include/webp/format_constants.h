@@ -1,8 +1,10 @@
 // Copyright 2012 Google Inc. All Rights Reserved.
 //
-// This code is licensed under the same terms as WebM:
-//  Software License Agreement:  http://www.webmproject.org/license/software/
-//  Additional IP Rights Grant:  http://www.webmproject.org/license/additional/
+// Use of this source code is governed by a BSD-style license
+// that can be found in the COPYING file in the root of the source
+// tree. An additional intellectual property rights grant can be found
+// in the file PATENTS. All contributing project authors may
+// be found in the AUTHORS file in the root of the source tree.
 // -----------------------------------------------------------------------------
 //
 //  Internal header for constants related to WebP file format.
@@ -11,6 +13,9 @@
 
 #ifndef WEBP_WEBP_FORMAT_CONSTANTS_H_
 #define WEBP_WEBP_FORMAT_CONSTANTS_H_
+
+// Create fourcc of the chunk from the chunk tag characters.
+#define MKFOURCC(a, b, c, d) ((uint32_t)(a) | (b) << 8 | (c) << 16 | (d) << 24)
 
 // VP8 related constants.
 #define VP8_SIGNATURE 0x9d012a              // Signature in VP8 data.
@@ -70,24 +75,11 @@ typedef enum {
 #define FRGM_CHUNK_SIZE    6     // Size of a FRGM chunk.
 #define VP8X_CHUNK_SIZE    10    // Size of a VP8X chunk.
 
-// VP8X Feature Flags.
-#if !(defined(__cplusplus) || defined(c_plusplus))
-typedef enum WebPFeatureFlags WebPFeatureFlags;
-#endif
-enum WebPFeatureFlags {
-  FRAGMENTS_FLAG  = 0x00000001,
-  ANIMATION_FLAG  = 0x00000002,
-  XMP_FLAG        = 0x00000004,
-  EXIF_FLAG       = 0x00000008,
-  ALPHA_FLAG      = 0x00000010,
-  ICCP_FLAG       = 0x00000020
-};
-
-#define MAX_CANVAS_SIZE     (1 << 24)    // 24-bit max for VP8X width/height.
-#define MAX_IMAGE_AREA      (1ULL << 32) // 32-bit max for width x height.
-#define MAX_LOOP_COUNT      (1 << 16)    // maximum value for loop-count
-#define MAX_DURATION        (1 << 24)    // maximum duration
-#define MAX_POSITION_OFFSET (1 << 24)    // maximum frame/fragment x/y offset
+#define MAX_CANVAS_SIZE     (1 << 24)     // 24-bit max for VP8X width/height.
+#define MAX_IMAGE_AREA      (1ULL << 32)  // 32-bit max for width x height.
+#define MAX_LOOP_COUNT      (1 << 16)     // maximum value for loop-count
+#define MAX_DURATION        (1 << 24)     // maximum duration
+#define MAX_POSITION_OFFSET (1 << 24)     // maximum frame/fragment x/y offset
 
 // Maximum chunk payload is such that adding the header and padding won't
 // overflow a uint32_t.

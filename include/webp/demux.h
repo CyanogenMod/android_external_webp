@@ -1,8 +1,10 @@
 // Copyright 2012 Google Inc. All Rights Reserved.
 //
-// This code is licensed under the same terms as WebM:
-//  Software License Agreement:  http://www.webmproject.org/license/software/
-//  Additional IP Rights Grant:  http://www.webmproject.org/license/additional/
+// Use of this source code is governed by a BSD-style license
+// that can be found in the COPYING file in the root of the source
+// tree. An additional intellectual property rights grant can be found
+// in the file PATENTS. All contributing project authors may
+// be found in the AUTHORS file in the root of the source tree.
 // -----------------------------------------------------------------------------
 //
 // Demux API.
@@ -45,20 +47,19 @@
 #ifndef WEBP_WEBP_DEMUX_H_
 #define WEBP_WEBP_DEMUX_H_
 
-#include "./format_constants.h"
 #include "./mux_types.h"
 
 #if defined(__cplusplus) || defined(c_plusplus)
 extern "C" {
 #endif
 
-#define WEBP_DEMUX_ABI_VERSION 0x0100    // MAJOR(8b) + MINOR(8b)
+#define WEBP_DEMUX_ABI_VERSION 0x0101    // MAJOR(8b) + MINOR(8b)
 
+// Note: forward declaring enumerations is not allowed in (strict) C and C++,
+// the types are left here for reference.
+// typedef enum WebPDemuxState WebPDemuxState;
+// typedef enum WebPFormatFeature WebPFormatFeature;
 typedef struct WebPDemuxer WebPDemuxer;
-#if !(defined(__cplusplus) || defined(c_plusplus))
-typedef enum WebPDemuxState WebPDemuxState;
-typedef enum WebPFormatFeature WebPFormatFeature;
-#endif
 typedef struct WebPIterator WebPIterator;
 typedef struct WebPChunkIterator WebPChunkIterator;
 
@@ -71,24 +72,23 @@ WEBP_EXTERN(int) WebPGetDemuxVersion(void);
 //------------------------------------------------------------------------------
 // Life of a Demux object
 
-enum WebPDemuxState {
+typedef enum WebPDemuxState {
   WEBP_DEMUX_PARSING_HEADER,  // Not enough data to parse full header.
   WEBP_DEMUX_PARSED_HEADER,   // Header parsing complete, data may be available.
   WEBP_DEMUX_DONE             // Entire file has been parsed.
-};
+} WebPDemuxState;
 
 // Internal, version-checked, entry point
 WEBP_EXTERN(WebPDemuxer*) WebPDemuxInternal(
     const WebPData*, int, WebPDemuxState*, int);
 
-// Parses the WebP file given by 'data'.
-// A complete WebP file must be present in 'data' for the function to succeed.
+// Parses the full WebP file given by 'data'.
 // Returns a WebPDemuxer object on successful parse, NULL otherwise.
 static WEBP_INLINE WebPDemuxer* WebPDemux(const WebPData* data) {
   return WebPDemuxInternal(data, 0, NULL, WEBP_DEMUX_ABI_VERSION);
 }
 
-// Parses the WebP file given by 'data'.
+// Parses the possibly incomplete WebP file given by 'data'.
 // If 'state' is non-NULL it will be set to indicate the status of the demuxer.
 // Returns a WebPDemuxer object on successful parse, NULL otherwise.
 static WEBP_INLINE WebPDemuxer* WebPDemuxPartial(
@@ -102,7 +102,7 @@ WEBP_EXTERN(void) WebPDemuxDelete(WebPDemuxer* dmux);
 //------------------------------------------------------------------------------
 // Data/information extraction.
 
-enum WebPFormatFeature {
+typedef enum WebPFormatFeature {
   WEBP_FF_FORMAT_FLAGS,  // Extended format flags present in the 'VP8X' chunk.
   WEBP_FF_CANVAS_WIDTH,
   WEBP_FF_CANVAS_HEIGHT,
@@ -112,7 +112,7 @@ enum WebPFormatFeature {
                          // In case of a partial demux, this is the number of
                          // frames seen so far, with the last frame possibly
                          // being partial.
-};
+} WebPFormatFeature;
 
 // Get the 'feature' value from the 'dmux'.
 // NOTE: values are only valid if WebPDemux() was used or WebPDemuxPartial()
@@ -136,8 +136,10 @@ struct WebPIterator {
                   // may still be decoded with the WebP incremental decoder.
   WebPData fragment;  // The frame or fragment given by 'frame_num' and
                       // 'fragment_num'.
+  int has_alpha;      // True if the frame or fragment contains transparency.
+  WebPMuxAnimBlend blend_method;  // Blend operation for the frame.
 
-  uint32_t pad[4];         // padding for later use.
+  uint32_t pad[2];         // padding for later use.
   void* private_;          // for internal use only.
 };
 

@@ -33,6 +33,11 @@ Local modifications:
   - Speedup in WebP compression (method 3 and above).
   - Added multi-threaded alpha encoding for lossy compression.
   - Updated WebP with head change#I9e5ae737
+- Sync-patch with libwebp ver 0.3.1 (head change#Idea3464b).
+  - Add incremental decoding support for images containing ALPH and ICCP chunks.
+- Updated WebP with patches required for Animation
+   (#I737451d7f, #Ia300385a & #I9566a8e2).
+- Fix memleak in WebPIDelete() (change#Id4faef1b).
 
 The Android.mk file creates WebP Decoder and Encoder static libraries which
 can be added to any application by Adding to LOCAL_STATIC_LIBRARIES

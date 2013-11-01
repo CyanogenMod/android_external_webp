@@ -1,8 +1,10 @@
 // Copyright 2011 Google Inc. All Rights Reserved.
 //
-// This code is licensed under the same terms as WebM:
-//  Software License Agreement:  http://www.webmproject.org/license/software/
-//  Additional IP Rights Grant:  http://www.webmproject.org/license/additional/
+// Use of this source code is governed by a BSD-style license
+// that can be found in the COPYING file in the root of the source
+// tree. An additional intellectual property rights grant can be found
+// in the file PATENTS. All contributing project authors may
+// be found in the AUTHORS file in the root of the source tree.
 // -----------------------------------------------------------------------------
 //
 // SSE2 version of speed-critical encoding functions.
@@ -453,6 +455,39 @@ static void FTransformSSE2(const uint8_t* src, const uint8_t* ref,
   }
 }
 
+static void FTransformWHTSSE2(const int16_t* in, int16_t* out) {
+  int16_t tmp[16];
+  int i;
+  for (i = 0; i < 4; ++i, in += 64) {
+    const int a0 = (in[0 * 16] + in[2 * 16]);
+    const int a1 = (in[1 * 16] + in[3 * 16]);
+    const int a2 = (in[1 * 16] - in[3 * 16]);
+    const int a3 = (in[0 * 16] - in[2 * 16]);
+    tmp[0 + i * 4] = a0 + a1;
+    tmp[1 + i * 4] = a3 + a2;
+    tmp[2 + i * 4] = a3 - a2;
+    tmp[3 + i * 4] = a0 - a1;
+  }
+  {
+    const __m128i src0 = _mm_loadl_epi64((__m128i*)&tmp[0]);
+    const __m128i src1 = _mm_loadl_epi64((__m128i*)&tmp[4]);
+    const __m128i src2 = _mm_loadl_epi64((__m128i*)&tmp[8]);
+    const __m128i src3 = _mm_loadl_epi64((__m128i*)&tmp[12]);
+    const __m128i a0 = _mm_add_epi16(src0, src2);
+    const __m128i a1 = _mm_add_epi16(src1, src3);
+    const __m128i a2 = _mm_sub_epi16(src1, src3);
+    const __m128i a3 = _mm_sub_epi16(src0, src2);
+    const __m128i b0 = _mm_srai_epi16(_mm_adds_epi16(a0, a1), 1);
+    const __m128i b1 = _mm_srai_epi16(_mm_adds_epi16(a3, a2), 1);
+    const __m128i b2 = _mm_srai_epi16(_mm_subs_epi16(a3, a2), 1);
+    const __m128i b3 = _mm_srai_epi16(_mm_subs_epi16(a0, a1), 1);
+    _mm_storel_epi64((__m128i*)&out[ 0], b0);
+    _mm_storel_epi64((__m128i*)&out[ 4], b1);
+    _mm_storel_epi64((__m128i*)&out[ 8], b2);
+    _mm_storel_epi64((__m128i*)&out[12], b3);
+  }
+}
+
 //------------------------------------------------------------------------------
 // Metric
 
@@ -776,7 +811,7 @@ static int Disto16x16SSE2(const uint8_t* const a, const uint8_t* const b,
 // Simple quantization
 static int QuantizeBlockSSE2(int16_t in[16], int16_t out[16],
                              int n, const VP8Matrix* const mtx) {
-  const __m128i max_coeff_2047 = _mm_set1_epi16(2047);
+  const __m128i max_coeff_2047 = _mm_set1_epi16(MAX_LEVEL);
   const __m128i zero = _mm_setzero_si128();
   __m128i coeff0, coeff8;
   __m128i out0, out8;
@@ -812,10 +847,6 @@ static int QuantizeBlockSSE2(int16_t in[16], int16_t out[16],
   coeff0 = _mm_add_epi16(coeff0, sharpen0);
   coeff8 = _mm_add_epi16(coeff8, sharpen8);
 
-  // if (coeff > 2047) coeff = 2047
-  coeff0 = _mm_min_epi16(coeff0, max_coeff_2047);
-  coeff8 = _mm_min_epi16(coeff8, max_coeff_2047);
-
   // out = (coeff * iQ + B) >> QFIX;
   {
     // doing calculations with 32b precision (QFIX=17)
@@ -843,9 +874,14 @@ static int QuantizeBlockSSE2(int16_t in[16], int16_t out[16],
     out_04 = _mm_srai_epi32(out_04, QFIX);
     out_08 = _mm_srai_epi32(out_08, QFIX);
     out_12 = _mm_srai_epi32(out_12, QFIX);
+
     // pack result as 16b
     out0 = _mm_packs_epi32(out_00, out_04);
     out8 = _mm_packs_epi32(out_08, out_12);
+
+    // if (coeff > 2047) coeff = 2047
+    out0 = _mm_min_epi16(out0, max_coeff_2047);
+    out8 = _mm_min_epi16(out8, max_coeff_2047);
   }
 
   // get sign back (if (sign[j]) out_n = -out_n)
@@ -918,6 +954,7 @@ void VP8EncDspInitSSE2(void) {
   VP8EncQuantizeBlock = QuantizeBlockSSE2;
   VP8ITransform = ITransformSSE2;
   VP8FTransform = FTransformSSE2;
+  VP8FTransformWHT = FTransformWHTSSE2;
   VP8SSE16x16 = SSE16x16SSE2;
   VP8SSE16x8 = SSE16x8SSE2;
   VP8SSE8x8 = SSE8x8SSE2;

@@ -5,3 +5,5 @@
 - 8/12: release version 0.2.0-rc1 (head change#Ia5475247)
 -     : Updated WebP with head change#I3da2063b
 - 3/13: Updated WebP with head change#I9e5ae737
+- 8/13: Release version 0.3.1 (head change#Idea3464b)
+- 9/13: Fix memleak in WebPIDelete() (change#Id4faef1b)
