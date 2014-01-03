@@ -7,3 +7,4 @@
 - 3/13: Updated WebP with head change#I9e5ae737
 - 8/13: Release version 0.3.1 (head change#Idea3464b)
 - 9/13: Fix memleak in WebPIDelete() (change#Id4faef1b)
+- 1/14: Release version 0.4.0-rc1 (change#I22be12d8)

@@ -38,11 +38,13 @@ LOCAL_SRC_FILES := \
         ../dsp/upsampling_sse2.c \
         ../dsp/yuv.c \
         ../demux/demux.c \
+        ../utils/alpha_processing.c \
         ../utils/bit_reader.c \
         ../utils/color_cache.c \
         ../utils/filters.c \
         ../utils/huffman.c \
         ../utils/quant_levels_dec.c \
+        ../utils/random.c \
         ../utils/rescaler.c \
         ../utils/thread.c \
         ../utils/utils.c

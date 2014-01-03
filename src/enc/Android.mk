@@ -40,12 +40,14 @@ LOCAL_SRC_FILES := \
         ../dsp/enc_sse2.c \
         ../dsp/lossless.c \
         ../dsp/yuv.c \
+        ../utils/alpha_processing.c \
         ../utils/bit_writer.c \
         ../utils/color_cache.c \
         ../utils/filters.c \
         ../utils/huffman.c \
         ../utils/huffman_encode.c \
         ../utils/quant_levels.c \
+        ../utils/random.c \
         ../utils/rescaler.c \
         ../utils/thread.c \
         ../utils/utils.c

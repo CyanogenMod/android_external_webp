@@ -4,7 +4,7 @@
           \__\__/\____/\_____/__/ ____  ___
                 / _/ /    \    \ /  _ \/ _/
                /  \_/   / /   \ \   __/  \__
-               \____/____/\_____/_____/____/v0.3.1
+               \____/____/\_____/_____/____/v0.4.0
 
 Description:
 ============
@@ -80,7 +80,7 @@ more options.
 SWIG bindings:
 --------------
 
-To generate language bindings from swig/libwebp.i at least swig-1.3
+To generate language bindings from swig/libwebp.swig at least swig-1.3
 (http://www.swig.org) is required.
 
 Currently the following functions are mapped:
@@ -115,7 +115,7 @@ DLL that can be loaded via System.loadLibrary("webp_jni").
 Python bindings:
 
 To build the swig-generated Python extension code at least Python 2.6 is
-required. Python < 2.6 may build with some minor changes to libwebp.i or the
+required. Python < 2.6 may build with some minor changes to libwebp.swig or the
 generated code, but is untested.
 
 Encoding tool:
@@ -178,6 +178,10 @@ options:
   -alpha_filter <string> . predictive filtering for alpha plane.
                            One of: none, fast (default) or best.
   -alpha_cleanup ......... Clean RGB values in transparent area.
+  -blend_alpha <hex> ..... Blend colors against background color
+                           expressed as RGB values written in
+                           hexadecimal, e.g. 0xc0e0d0 for red=0xc0
+                           green=0xe0 and blue=0xd0.
   -noalpha ............... discard any transparency information.
   -lossless .............. Encode image losslessly.
   -hint <string> ......... Specify image characteristics hint.
@@ -251,18 +255,23 @@ Decodes the WebP image file to PNG format [Default]
 Use following options to convert into alternate image formats:
   -pam ......... save the raw RGBA samples as a color PAM
   -ppm ......... save the raw RGB samples as a color PPM
+  -bmp ......... save as uncompressed BMP format
+  -tiff ........ save as uncompressed TIFF format
   -pgm ......... save the raw YUV samples as a grayscale PGM
-                 file with IMC4 layout.
-  -yuv ......... save the raw YUV samples in flat layout.
+                 file with IMC4 layout
+  -yuv ......... save the raw YUV samples in flat layout
 
  Other options are:
   -version  .... print version number and exit.
   -nofancy ..... don't use the fancy YUV420 upscaler.
   -nofilter .... disable in-loop filtering.
+  -nodither .... disable dithering.
+  -dither <d> .. dithering strength (in 0..100)
   -mt .......... use multi-threading
   -crop <x> <y> <w> <h> ... crop output with the given rectangle
   -scale <w> <h> .......... scale the output (*after* any cropping)
   -alpha ....... only save the alpha plane.
+  -incremental . use incremental decoding (useful for tests)
   -h     ....... this help message.
   -v     ....... verbose (e.g. print encoding/decoding times)
   -noasm ....... disable all assembly optimizations.
@@ -283,6 +292,7 @@ Options are:
   -noicc ....... don't use the icc profile if present.
   -nofancy ..... don't use the fancy YUV420 upscaler.
   -nofilter .... disable in-loop filtering.
+  -dither <int>  dithering strength (0..100). Default=50.
   -mt .......... use multi-threading.
   -info ........ print info.
   -h     ....... this help message.
@@ -317,6 +327,43 @@ Build using makefile.unix / Makefile.vc:
 $ make -f makefile.unix examples/vwebp
 > nmake /f Makefile.vc CFG=release-static \
     ../obj/x64/release-static/bin/vwebp.exe
+
+Animated GIF conversion:
+========================
+Animated GIF files can be converted to WebP files with animation using the
+gif2webp utility available under examples/. The files can then be viewed using
+vwebp.
+
+Usage:
+ gif2webp [options] gif_file -o webp_file
+options:
+  -h / -help  ............ this help
+  -lossy ................. Encode image using lossy compression.
+  -mixed ................. For each frame in the image, pick lossy
+                           or lossless compression heuristically.
+  -q <float> ............. quality factor (0:small..100:big)
+  -m <int> ............... compression method (0=fast, 6=slowest)
+  -kmin <int> ............ Min distance between key frames
+  -kmax <int> ............ Max distance between key frames
+  -f <int> ............... filter strength (0=off..100)
+  -metadata <string> ..... comma separated list of metadata to
+                           copy from the input to the output if present.
+                           Valid values: all, none, icc, xmp (default)
+  -mt .................... use multi-threading if available
+
+  -version ............... print version number and exit.
+  -v ..................... verbose.
+  -quiet ................. don't print anything.
+
+Building:
+---------
+With the libgif development files installed, gif2webp can be built using
+makefile.unix:
+$ make -f makefile.unix examples/gif2webp
+
+or using autoconf:
+$ ./configure --enable-everything
+$ make
 
 Encoding API:
 =============
