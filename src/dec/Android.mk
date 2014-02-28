@@ -55,6 +55,8 @@ LOCAL_C_INCLUDES += \
         $(LOCAL_PATH) \
         $(LOCAL_PATH)/../../include
 
-LOCAL_MODULE:= libwebp-decode
+LOCAL_SDK_VERSION := 9
+
+LOCAL_MODULE := libwebp-decode
 
 include $(BUILD_STATIC_LIBRARY)
