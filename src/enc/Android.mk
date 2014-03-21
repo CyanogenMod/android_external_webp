@@ -58,6 +58,8 @@ LOCAL_C_INCLUDES += \
         $(LOCAL_PATH) \
         $(LOCAL_PATH)/../../include
 
-LOCAL_MODULE:= libwebp-encode
+LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
+
+LOCAL_MODULE := libwebp-encode
 
 include $(BUILD_STATIC_LIBRARY)
