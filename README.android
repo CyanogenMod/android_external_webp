@@ -40,6 +40,12 @@ Local modifications:
 - Fix memleak in WebPIDelete() (change#Id4faef1b).
 - Sync-patch with libwebp ver 0.4.0-rc1 (change#I22be12d8).
 - Bugfix for incremental decode of lossy-alpha (change#I716ce082)
+- Sync-patch with libwebp ver 0.4.1-rc1 (change#I5346984d2).
+  - NEON assembly optimizations:
+    - ~25% faster lossy decode / encode (-m 4)
+    - ~10% faster lossless decode
+    - ~5-10% faster lossless encode (-m 3/4)
+  - Arch64 (arm64) & MIPS support/optimizations.
 
 The Android.mk file creates WebP Decoder and Encoder static libraries which
 can be added to any application by Adding to LOCAL_STATIC_LIBRARIES
