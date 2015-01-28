@@ -46,6 +46,8 @@ Local modifications:
     - ~10% faster lossless decode
     - ~5-10% faster lossless encode (-m 3/4)
   - Arch64 (arm64) & MIPS support/optimizations.
+- Sync-patch with libwebp ver 0.4.2 (change#I32a22786f).
+  - Cherry-picked Alpha-decoding bug.
 
 The Android.mk file creates WebP Decoder and Encoder static libraries which
 can be added to any application by Adding to LOCAL_STATIC_LIBRARIES
