@@ -38,6 +38,7 @@ LOCAL_SRC_FILES := \
         enc/vp8l.c \
         enc/webpenc.c \
         dsp/alpha_processing.c \
+        dsp/alpha_processing_sse2.c \
         dsp/cpu.c \
         dsp/cpu-features.c \
         dsp/enc.c \
@@ -89,6 +90,7 @@ LOCAL_SRC_FILES := \
         dec/vp8l.c \
         dec/webp.c \
         dsp/alpha_processing.c \
+        dsp/alpha_processing_sse2.c \
         dsp/cpu.c \
         dsp/cpu-features.c \
         dsp/dec.c \
