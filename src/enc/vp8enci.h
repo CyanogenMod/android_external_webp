@@ -15,7 +15,7 @@
 #define WEBP_ENC_VP8ENCI_H_
 
 #include <string.h>     // for memcpy()
-#include "webp/encode.h"
+#include "../webp/encode.h"
 #include "../dsp/dsp.h"
 #include "../utils/bit_writer.h"
 #include "../utils/thread.h"
@@ -30,7 +30,7 @@ extern "C" {
 // version numbers
 #define ENC_MAJ_VERSION 0
 #define ENC_MIN_VERSION 4
-#define ENC_REV_VERSION 2
+#define ENC_REV_VERSION 4
 
 // intra prediction modes
 enum { B_DC_PRED = 0,   // 4x4 modes

@@ -1,5 +1,5 @@
-URL: https://gerrit.chromium.org/gerrit/gitweb?p=webm%2Flibwebp.git
-Version: v0.4.3
+URL: https://chromium.googlesource.com/webm/libwebp
+Version: v0.4.4
 License: Google BSD like
 
 Local modifications:
