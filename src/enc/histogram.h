@@ -21,8 +21,8 @@
 #include <string.h>
 
 #include "./backward_references.h"
-#include "webp/format_constants.h"
-#include "webp/types.h"
+#include "../webp/format_constants.h"
+#include "../webp/types.h"
 
 #ifdef __cplusplus
 extern "C" {
