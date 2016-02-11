@@ -77,7 +77,8 @@ LOCAL_SRC_FILES := \
         utils/thread.c \
         utils/utils.c
 
-LOCAL_CFLAGS := -DANDROID -DWEBP_SWAP_16BIT_CSP
+LOCAL_ARM_MODE := arm
+LOCAL_CFLAGS := -O2 -DANDROID -DWEBP_SWAP_16BIT_CSP
 
 LOCAL_C_INCLUDES += \
         $(LOCAL_PATH)/enc \
@@ -147,7 +148,8 @@ LOCAL_SRC_FILES := \
         utils/thread.c \
         utils/utils.c
 
-LOCAL_CFLAGS := -DANDROID -DWEBP_SWAP_16BIT_CSP
+LOCAL_ARM_MODE := arm
+LOCAL_CFLAGS := -O2 -DANDROID -DWEBP_SWAP_16BIT_CSP
 
 LOCAL_C_INCLUDES += \
         $(LOCAL_PATH)/dec \
